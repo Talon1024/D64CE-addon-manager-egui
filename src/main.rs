@@ -2,6 +2,7 @@ use eframe::{egui, emath::Vec2};
 use std::{
     collections::HashMap,
     error::Error,
+    env,
     fs::{self, File},
     io::Read,
     path::Path,
@@ -27,11 +28,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         options.initial_window_size = Some(Vec2 {x: 550., y: 300.});
         options
     };
+    let quit_on_launch = env::args().any(|arg| arg.to_lowercase() == "--quit-on-launch");
     let addons = get_addons(None);
     match addons {
         Ok(addons) => {
             eframe::run_native("Doom 64 CE launcher", options,
-                Box::new(|_| Box::new(AddonManager::new(None, addons))));
+                Box::new(move |_| Box::new(AddonManager::new(None, addons, quit_on_launch))));
         },
         Err(error) => {
             let message = format!("{:#?}", error);
@@ -86,10 +88,11 @@ struct AddonManager {
     selected_primary_addon: usize,
     selected_secondary_addons: Box<[bool]>,
     selected_gzdoom_build: usize,
+    quit_on_launch: bool,
 }
 
 impl AddonManager {
-    pub fn new(gzdoom_build_glob_pattern: Option<&str>, addons: AddonMap) -> AddonManager {
+    pub fn new(gzdoom_build_glob_pattern: Option<&str>, addons: AddonMap, quit_on_launch: bool) -> AddonManager {
         let primary_addons: Box<[String]> = iter::once(String::from("None")).chain(addons.iter().filter(|(_name, addon)| {
             addon.secondary.is_none()
         }).map(|(name, _addon)| name.clone())).collect();
@@ -118,6 +121,7 @@ impl AddonManager {
             selected_primary_addon: 0,
             selected_secondary_addons,
             selected_gzdoom_build: 0,
+            quit_on_launch,
         }
     }
     fn gzdoom_build(&self) -> &str {
@@ -203,7 +207,9 @@ impl eframe::App for AddonManager {
                     println!("{}", gzdoom_build);
                     print!("{}", primary_addon);
                     println!("{}", secondary_addons);
-                    process::exit(0);
+                    if self.quit_on_launch {
+                        process::exit(0);
+                    }
                 }
 
                 if ui.button("Exit").clicked() {
