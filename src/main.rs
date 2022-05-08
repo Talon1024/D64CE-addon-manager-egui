@@ -1,4 +1,4 @@
-use eframe::egui;
+use eframe::{egui, emath::Vec2};
 use std::{
     collections::HashMap,
     error::Error,
@@ -6,6 +6,7 @@ use std::{
     io::Read,
     path::Path,
     iter,
+    process,
 };
 use serde::{Serialize, Deserialize};
 use std::os::unix::fs::PermissionsExt;
@@ -21,7 +22,11 @@ struct AddonSpecification {
 type AddonMap = HashMap<String, AddonSpecification>;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let options = eframe::NativeOptions::default();
+    let options = {
+        let mut options = eframe::NativeOptions::default();
+        options.initial_window_size = Some(Vec2 {x: 550., y: 300.});
+        options
+    };
     let addons = get_addons(None);
     match addons {
         Ok(addons) => {
@@ -160,7 +165,7 @@ impl AddonManager {
 impl eframe::App for AddonManager {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ComboBox::from_label("GZDoom build:")
+            egui::ComboBox::from_label("GZDoom build")
             .selected_text(self.builds.get(self.selected_gzdoom_build)
                 .unwrap_or(&String::from("None")))
             .show_ui(ui, |ui| {
@@ -171,7 +176,7 @@ impl eframe::App for AddonManager {
 
             ui.separator();
 
-            egui::ComboBox::from_label("Primary addon:")
+            egui::ComboBox::from_label("Primary addon")
             .selected_text(self.primary_addons.get(self.selected_primary_addon)
                 .unwrap_or(&String::from("None")))
             .show_ui(ui, |ui| {
@@ -182,7 +187,7 @@ impl eframe::App for AddonManager {
 
             ui.separator();
 
-            ui.label("Secondary addons:");
+            ui.label("Secondary addons");
             self.selected_secondary_addons.iter_mut().zip(self.secondary_addons.iter())
             .for_each(|(selected, name)| {
                 ui.checkbox(selected, name);
@@ -196,12 +201,13 @@ impl eframe::App for AddonManager {
                     let primary_addon = self.primary_addon();
                     let secondary_addons = self.secondary_addons();
                     println!("{}", gzdoom_build);
-                    println!("{}", primary_addon);
+                    print!("{}", primary_addon);
                     println!("{}", secondary_addons);
+                    process::exit(0);
                 }
 
                 if ui.button("Exit").clicked() {
-                    return;
+                    process::exit(0);
                 }
             });
         });
@@ -215,7 +221,7 @@ impl eframe::App for ErrorMessage {
             ui.heading("Error!");
             ui.label(&self.0);
             if ui.button("Exit").clicked() {
-                return;
+                process::exit(1);
             }
         });
     }
