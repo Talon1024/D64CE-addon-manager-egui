@@ -24,10 +24,10 @@ struct AddonSpecification {
 type AddonMap = HashMap<String, AddonSpecification>;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let options = {
-        let mut options = eframe::NativeOptions::default();
-        options.initial_window_size = Some(Vec2 {x: 550., y: 300.});
-        options
+    let options = eframe::NativeOptions {
+        initial_window_size: Some(Vec2 {x: 550., y: 300.}),
+        vsync: false,
+        ..Default::default()
     };
     let quit_on_launch = env::args().any(|arg| arg.to_lowercase() == "--quit-on-launch");
     let addons = get_addons(None);
