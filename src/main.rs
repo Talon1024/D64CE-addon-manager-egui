@@ -10,6 +10,7 @@ use std::{
     process,
 };
 use serde::{Serialize, Deserialize};
+#[cfg(not(target_family = "windows"))]
 use std::os::unix::fs::PermissionsExt;
 
 
@@ -66,7 +67,9 @@ fn get_addons(fname: Option<&str>) -> Result<AddonMap, Box<dyn Error>> {
 }
 
 const S_IXOTH: u32 = 0o1;
+#[cfg(not(target_family = "windows"))]
 fn is_executable(path: &impl AsRef<Path>) -> bool {
+    // Linux/Unix uses a file permission bit
     let metadata = fs::metadata(path);
     match metadata {
         Ok(m) => {
@@ -76,6 +79,14 @@ fn is_executable(path: &impl AsRef<Path>) -> bool {
             (mode & (S_IXOTH)) != 0
         }
         Err(_) => false
+    }
+}
+#[cfg(target_family = "windows")]
+fn is_executable(path: &impl AsRef<Path>) -> bool {
+    // Windows uses the .exe extension
+    match path.extension() {
+        Some(ext) => {ext.eq_ignore_ascii_case("exe")},
+        None => false
     }
 }
 
