@@ -100,7 +100,7 @@ impl AddonManager {
             addon.secondary.is_some()
         }).map(|(name, _addon)| name.clone()).collect();
         let selected_secondary_addons: Box<[bool]> = Box::from_iter(secondary_addons.iter().map(|_| true));
-        let pat = gzdoom_build_glob_pattern.unwrap_or("/home/kevinc/Games/doom/gzdoom-*/**/gzdoom*");
+        let pat = gzdoom_build_glob_pattern.unwrap_or(include_str!("gzdoom.glob"));
         let builds: Box<[String]> = match glob::glob(pat) {
             Ok(paths) => paths
                 .filter_map(Result::ok)
@@ -172,7 +172,7 @@ impl eframe::App for AddonManager {
             egui::ComboBox::from_label("GZDoom build")
             .selected_text(self.builds.get(self.selected_gzdoom_build)
                 .unwrap_or(&String::from("None")))
-            .show_ui(ui, |ui| {
+            .width(400.).show_ui(ui, |ui| {
                 self.builds.iter().enumerate().for_each(|(index, build)| {
                     ui.selectable_value(&mut self.selected_gzdoom_build, index, build);
                 });
@@ -183,7 +183,7 @@ impl eframe::App for AddonManager {
             egui::ComboBox::from_label("Primary addon")
             .selected_text(self.primary_addons.get(self.selected_primary_addon)
                 .unwrap_or(&String::from("None")))
-            .show_ui(ui, |ui| {
+            .width(400.).show_ui(ui, |ui| {
                 self.primary_addons.iter().enumerate().for_each(|(index, addon)| {
                     ui.selectable_value(&mut self.selected_primary_addon, index, addon);
                 });
