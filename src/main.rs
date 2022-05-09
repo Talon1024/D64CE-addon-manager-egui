@@ -144,13 +144,13 @@ impl AddonManager {
                 let mut files = String::new();
                 for file in &addon.required {
                     files.push_str(file);
-                    files.push(' ');
+                    files.push_str("     ");
                 }
                 if let Some(optional) = &addon.optional {
                     for file in optional {
                         if File::open(file).is_ok() {
                             files.push_str(file);
-                            files.push(' ');
+                            files.push_str("     ");
                         }
                     }
                 }
