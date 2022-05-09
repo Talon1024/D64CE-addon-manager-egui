@@ -202,10 +202,12 @@ impl eframe::App for AddonManager {
 
             ui.separator();
 
-            ui.label("Secondary addons");
-            self.selected_secondary_addons.iter_mut().zip(self.secondary_addons.iter())
-            .for_each(|(selected, name)| {
-                ui.checkbox(selected, name);
+            egui::CollapsingHeader::new("Secondary addons")
+            .default_open(true).show(ui, |ui| {
+                self.selected_secondary_addons.iter_mut().zip(self.secondary_addons.iter())
+                .for_each(|(selected, name)| {
+                    ui.checkbox(selected, name);
+                });
             });
 
             ui.separator();
