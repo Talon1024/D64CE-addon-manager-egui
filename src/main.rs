@@ -23,18 +23,28 @@ struct AddonSpecification {
 
 type AddonMap = HashMap<String, AddonSpecification>;
 
+#[derive(Debug, Clone, Default)]
+struct AppOptions {
+    quit_on_launch: bool,
+    gzdoom_glob: Option<String>,
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let options = eframe::NativeOptions {
         initial_window_size: Some(Vec2 {x: 550., y: 300.}),
         vsync: false,
         ..Default::default()
     };
-    let quit_on_launch = env::args().any(|arg| arg.to_lowercase() == "--quit-on-launch");
+    let app_options = AppOptions {
+        quit_on_launch: env::args().any(|arg| arg == "--quit-on-launch"),
+        gzdoom_glob: env::args().skip_while(|arg| arg != "--gzdoom-glob").skip(1).next(),
+        ..Default::default()
+    };
     let addons = get_addons(None);
     match addons {
         Ok(addons) => {
             eframe::run_native("Doom 64 CE launcher", options,
-                Box::new(move |_| Box::new(AddonManager::new(None, addons, quit_on_launch))));
+                Box::new(move |_| Box::new(AddonManager::new(addons, app_options))));
         },
         Err(error) => {
             let message = format!("{:#?}", error);
@@ -91,6 +101,18 @@ fn is_executable(path: &impl AsRef<Path>) -> bool {
 }
 
 #[derive(Debug, Clone)]
+enum GZDoomBuildSelection {
+    ListIndex(usize),
+    FullPath(String),
+}
+
+impl Default for GZDoomBuildSelection {
+    fn default() -> Self {
+        GZDoomBuildSelection::FullPath(String::new())
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 struct AddonManager {
     builds: Box<[String]>,
     addons: AddonMap,
@@ -98,12 +120,13 @@ struct AddonManager {
     secondary_addons: Box<[String]>,
     selected_primary_addon: usize,
     selected_secondary_addons: Box<[bool]>,
-    selected_gzdoom_build: usize,
+    selected_gzdoom_build: GZDoomBuildSelection,
     quit_on_launch: bool,
+    popup: Option<String>,
 }
 
 impl AddonManager {
-    pub fn new(gzdoom_build_glob_pattern: Option<&str>, addons: AddonMap, quit_on_launch: bool) -> AddonManager {
+    pub fn new(addons: AddonMap, app_options: AppOptions) -> AddonManager {
         let primary_addons: Box<[String]> = iter::once(String::from("None")).chain(addons.iter().filter(|(_name, addon)| {
             addon.secondary.is_none()
         }).map(|(name, _addon)| name.clone())).collect();
@@ -111,8 +134,8 @@ impl AddonManager {
             addon.secondary.is_some()
         }).map(|(name, _addon)| name.clone()).collect();
         let selected_secondary_addons: Box<[bool]> = Box::from_iter(secondary_addons.iter().map(|_| true));
-        let pat = gzdoom_build_glob_pattern.unwrap_or(include_str!("gzdoom.glob"));
-        let builds: Box<[String]> = match glob::glob(pat) {
+        let pat = app_options.gzdoom_glob.unwrap_or(String::from(""));
+        let builds: Box<[String]> = match glob::glob(&pat) {
             Ok(paths) => paths
                 .filter_map(Result::ok)
                 .filter_map(|p| {
@@ -124,6 +147,7 @@ impl AddonManager {
                 .collect(),
             Err(_e) => Box::from([])
         };
+        let build_count = builds.len();
         AddonManager {
             builds,
             primary_addons,
@@ -131,12 +155,19 @@ impl AddonManager {
             addons,
             selected_primary_addon: 0,
             selected_secondary_addons,
-            selected_gzdoom_build: 0,
-            quit_on_launch,
+            selected_gzdoom_build: match build_count {
+                0 => GZDoomBuildSelection::FullPath(String::new()),
+                _ => GZDoomBuildSelection::ListIndex(0),
+            },
+            quit_on_launch: app_options.quit_on_launch,
+            ..Default::default()
         }
     }
     fn gzdoom_build(&self) -> &str {
-        self.builds.get(self.selected_gzdoom_build).map(String::as_str).unwrap_or("")
+        match &self.selected_gzdoom_build {
+            GZDoomBuildSelection::ListIndex(index) => self.builds.get(*index).map(String::as_str).unwrap_or(""),
+            GZDoomBuildSelection::FullPath(path) => path.as_str()
+        }
     }
     fn files_for_addon(&self, addon: Option<&AddonSpecification>) -> String {
         match addon {
@@ -180,14 +211,36 @@ impl AddonManager {
 impl eframe::App for AddonManager {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ComboBox::from_label("GZDoom build")
-            .selected_text(self.builds.get(self.selected_gzdoom_build)
-                .unwrap_or(&String::from("None")))
-            .width(400.).show_ui(ui, |ui| {
-                self.builds.iter().enumerate().for_each(|(index, build)| {
-                    ui.selectable_value(&mut self.selected_gzdoom_build, index, build);
-                });
-            });
+            match &mut self.selected_gzdoom_build {
+                GZDoomBuildSelection::ListIndex(bindex) => {
+                    egui::ComboBox::from_label("GZDoom build")
+                    .selected_text(self.builds.get(*bindex)
+                        .unwrap_or(&String::from("None")))
+                    .width(400.).show_ui(ui, |ui| {
+                        self.builds.iter().enumerate().for_each(|(index, build)| {
+                            ui.selectable_value(bindex, index, build);
+                        });
+                    });
+                },
+                GZDoomBuildSelection::FullPath(path) => {
+                    ui.horizontal(|ui| {
+                        ui.label("GZDoom build:");
+                        ui.add(egui::TextEdit::singleline(path));
+                        if ui.button("Browse").clicked() {
+                            if let Ok(choice) = native_dialog::FileDialog::new()
+                            .show_open_single_file() {
+                                if let Some(choice) = choice {
+                                    if is_executable(&choice) {
+                                        *path = String::from(choice.to_str().unwrap_or(""));
+                                    } else {
+                                        self.popup = Some(format!("{:?} is not executable!", choice));
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
 
             ui.separator();
 
@@ -230,6 +283,21 @@ impl eframe::App for AddonManager {
                 }
             });
         });
+        if let Some(msg) = &self.popup {
+            // Work around borrow checker. Argh.
+            let mut open = true;
+            let mut close = false;
+            egui::Window::new("Message")
+            .open(&mut open).show(ctx, |ui| {
+                ui.label(msg);
+                if ui.button("OK").clicked() {
+                    close = true;
+                }
+            });
+            if !open || close {
+                self.popup = None;
+            }
+        }
     }
 }
 
