@@ -1,4 +1,3 @@
-use eframe::{egui, emath::Vec2};
 use std::{
     collections::HashMap,
     error::Error,
@@ -8,6 +7,7 @@ use std::{
     path::Path,
     iter,
     process,
+    rc::Rc,
 };
 use serde::{Serialize, Deserialize};
 #[cfg(not(target_family = "windows"))]
@@ -30,28 +30,102 @@ struct AppOptions {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    /*
     let options = eframe::NativeOptions {
         initial_window_size: Some(Vec2 {x: 550., y: 300.}),
         vsync: false,
         ..Default::default()
     };
+    */
+    use glutin::{Api, GlRequest, dpi::{Size, LogicalSize}};
+    use egui_glow::{painter::Context, EguiGlow};
+    let el = glutin::event_loop::EventLoop::new();
+    let wb = glutin::window::WindowBuilder::new()
+        .with_title("Doom 64 CE launcher")
+        .with_inner_size(Size::new(LogicalSize::new(550.0f32, 300.0f32)));
+    let cb = glutin::ContextBuilder::new()
+        .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
+        .build_windowed(wb, &el)?;
+    let cb = unsafe { cb.make_current() }.map_err(|(_old_ctx, err)| err)?;
+    let ctx = Rc::from(unsafe {
+        Context::from_loader_function(|name| cb.get_proc_address(name)) });
+    let mut eguiglow = EguiGlow::new(cb.window(), ctx.clone());
     let app_options = AppOptions {
         quit_on_launch: env::args().any(|arg| arg == "--quit-on-launch"),
         gzdoom_glob: env::args().skip_while(|arg| arg != "--gzdoom-glob").skip(1).next(),
         ..Default::default()
     };
     let addons = get_addons(None);
-    match addons {
+    let mut app: Box<dyn App> = match addons {
         Ok(addons) => {
+            Box::new(AddonManager::new(addons, app_options))
+            /*
             eframe::run_native("Doom 64 CE launcher", options,
-                Box::new(move |_| Box::new(AddonManager::new(addons, app_options))));
+                Box::new(move |_| Box::new(AddonManager::new(addons, app_options)))); */
         },
         Err(error) => {
             let message = format!("{:#?}", error);
+            Box::new(ErrorMessage::from(message))
+            /*
             eframe::run_native("Doom 64 CE launcher", options,
-                Box::new(|_| Box::new(ErrorMessage(message))));
+                Box::new(|_| Box::new(ErrorMessage(message)))); */
         }
-    }
+    };
+    el.run(move |event, _, control_flow| {
+        // Some code copied from https://github.com/emilk/egui/blob/master/egui_glow/examples/pure_glow.rs
+        let mut redraw = || {
+            use glutin::event_loop::ControlFlow;
+            let needs_repaint = eguiglow.run(cb.window(), |ctx| app.update(ctx));
+            let quit = app.quit();
+
+            *control_flow = if quit {
+                ControlFlow::Exit
+            } else if needs_repaint {
+                cb.window().request_redraw();
+                ControlFlow::Poll
+            } else {
+                ControlFlow::Wait
+            };
+
+            eguiglow.paint(cb.window());
+            cb.swap_buffers().unwrap();
+        };
+
+        // Copied from https://github.com/emilk/egui/blob/master/egui_glow/examples/pure_glow.rs
+        match event {
+            // Platform-dependent event handlers to workaround a winit bug
+            // See: https://github.com/rust-windowing/winit/issues/987
+            // See: https://github.com/rust-windowing/winit/issues/1619
+            glutin::event::Event::RedrawEventsCleared if cfg!(windows) => redraw(),
+            glutin::event::Event::RedrawRequested(_) if !cfg!(windows) => redraw(),
+
+            glutin::event::Event::WindowEvent { event, .. } => {
+                use glutin::event::WindowEvent;
+                if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
+                    *control_flow = glutin::event_loop::ControlFlow::Exit;
+                }
+
+                if let glutin::event::WindowEvent::Resized(physical_size) = &event {
+                    cb.resize(*physical_size);
+                } else if let glutin::event::WindowEvent::ScaleFactorChanged {
+                    new_inner_size,
+                    ..
+                } = &event
+                {
+                    cb.resize(**new_inner_size);
+                }
+
+                eguiglow.on_event(&event);
+
+                cb.window().request_redraw(); // TODO: ask egui if the events warrants a repaint instead
+            }
+            glutin::event::Event::LoopDestroyed => {
+                eguiglow.destroy();
+            }
+
+            _ => (),
+        }
+    });
 }
 
 fn get_addons(fname: Option<&str>) -> Result<AddonMap, Box<dyn Error>> {
@@ -123,6 +197,7 @@ struct AddonManager {
     selected_gzdoom_build: GZDoomBuildSelection,
     quit_on_launch: bool,
     popup: Option<String>,
+    quit: bool,
 }
 
 impl AddonManager {
@@ -208,8 +283,13 @@ impl AddonManager {
     }
 }
 
-impl eframe::App for AddonManager {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+trait App {
+    fn update(&mut self, ctx: &egui::Context);
+    fn quit(&self) -> bool;
+}
+
+impl App for AddonManager {
+    fn update(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             match &mut self.selected_gzdoom_build {
                 GZDoomBuildSelection::ListIndex(bindex) => {
@@ -274,12 +354,12 @@ impl eframe::App for AddonManager {
                     print!("{}", primary_addon);
                     println!("{}", secondary_addons);
                     if self.quit_on_launch {
-                        process::exit(0);
+                        self.quit = true;
                     }
                 }
 
                 if ui.button("Exit").clicked() {
-                    process::exit(0);
+                    self.quit = true;
                 }
             });
         });
@@ -299,17 +379,28 @@ impl eframe::App for AddonManager {
             }
         }
     }
+    fn quit(&self) -> bool {
+        self.quit
+    }
 }
 
-struct ErrorMessage(String);
-impl eframe::App for ErrorMessage {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+struct ErrorMessage(String, bool);
+impl From<String> for ErrorMessage {
+    fn from(s: String) -> Self {
+        ErrorMessage(s, false)
+    }
+}
+impl App for ErrorMessage {
+    fn update(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Error!");
             ui.label(&self.0);
             if ui.button("Exit").clicked() {
-                process::exit(1);
+                self.1 = true;
             }
         });
+    }
+    fn quit(&self) -> bool {
+        self.1
     }
 }

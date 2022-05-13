@@ -6,7 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-eframe = "0.18.0"
+egui = "0.18.1"
+egui_glow = {version = "0.18.1", features = ["winit"]}
+glutin = "0.28.0"
 native-dialog = "0.6.3"
 serde = {version = "1.0", features = ["derive"]}
 serde_yaml = "0.8.24"
