@@ -6,7 +6,6 @@ use std::{
     io::Read,
     path::Path,
     iter,
-    process,
     rc::Rc,
 };
 use serde::{Serialize, Deserialize};
@@ -165,11 +164,14 @@ fn is_executable(path: &impl AsRef<Path>) -> bool {
         Err(_) => false
     }
 }
+
 #[cfg(target_family = "windows")]
 fn is_executable(path: &impl AsRef<Path>) -> bool {
-    // Windows uses the .exe extension
+    // Windows executables have certain extensions
+    let executable_extns = ["exe", "bat", "com"];
     match path.extension() {
-        Some(ext) => {ext.eq_ignore_ascii_case("exe")},
+        Some(ext) => {executable_extns.iter().any(
+            |extn| ext.eq_ignore_ascii_case(extn))},
         None => false
     }
 }
