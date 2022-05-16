@@ -1,26 +1,16 @@
 use std::{
-    collections::HashMap,
     error::Error,
     env,
     fs::{self, File},
-    io::Read,
     path::Path,
     iter,
     rc::Rc,
 };
-use serde::{Serialize, Deserialize};
 #[cfg(not(target_family = "windows"))]
 use std::os::unix::fs::PermissionsExt;
 
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct AddonSpecification {
-    required: Vec<String>,
-    optional: Option<Vec<String>>,
-    secondary: Option<String>,
-}
-
-type AddonMap = HashMap<String, AddonSpecification>;
+mod addon;
+use addon::{AddonMap, AddonSpecification};
 
 #[derive(Debug, Clone, Default)]
 struct AppOptions {
@@ -29,13 +19,6 @@ struct AppOptions {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    /*
-    let options = eframe::NativeOptions {
-        initial_window_size: Some(Vec2 {x: 550., y: 300.}),
-        vsync: false,
-        ..Default::default()
-    };
-    */
     use glutin::{Api, GlRequest, dpi::{Size, LogicalSize}};
     use egui_glow::{painter::Context, EguiGlow};
     let el = glutin::event_loop::EventLoop::new();
@@ -48,13 +31,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cb = unsafe { cb.make_current() }.map_err(|(_old_ctx, err)| err)?;
     let ctx = Rc::from(unsafe {
         Context::from_loader_function(|name| cb.get_proc_address(name)) });
-    let mut eguiglow = EguiGlow::new(cb.window(), ctx.clone());
+    let mut eguiglow = EguiGlow::new(cb.window(), Rc::clone(&ctx));
     let app_options = AppOptions {
         quit_on_launch: env::args().any(|arg| arg == "--quit-on-launch"),
         gzdoom_glob: env::args().skip_while(|arg| arg != "--gzdoom-glob").skip(1).next(),
         ..Default::default()
     };
-    let addons = get_addons(None);
+    let addons = addon::get_addons(None);
     let mut app: Box<dyn App> = match addons {
         Ok(addons) => {
             Box::new(AddonManager::new(addons, app_options))
@@ -125,28 +108,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => (),
         }
     });
-}
-
-fn get_addons(fname: Option<&str>) -> Result<AddonMap, Box<dyn Error>> {
-    let contents = {
-        let mut file = File::open(fname.unwrap_or("addons.yml"))?;
-        let mut s = String::new();
-        file.read_to_string(&mut s)?;
-        s
-    };
-
-    #[derive(Serialize, Deserialize, Debug, Clone)]
-    struct Addons {
-        addons: AddonMap,
-    }
-
-    let addons: Addons = serde_yaml::from_str(&contents)?;
-    let addons: AddonMap = addons.addons.into_iter()
-        .filter(|(name, entry)| {
-        name.to_lowercase() != "none" &&
-        entry.required.iter().all(|req_file| File::open(req_file).is_ok())
-    }).collect();
-    Ok(addons)
 }
 
 const S_IXOTH: u32 = 0o1;
@@ -401,7 +362,7 @@ impl App for ErrorMessage {
             ui.label("This program is a helper for Doom mod launcher scripts.");
             ui.label("Users may select one primary addon, and any secondary addons.");
             ui.horizontal(|ui| {
-                ui.label("This program reads addon information from ");
+                ui.label("This program reads addon information from");
                 ui.code("addons.yml");
                 ui.label(". This file should");
             });
@@ -412,9 +373,9 @@ impl App for ErrorMessage {
                 ui.vertical(|ui| {
                     ui.label("A 'glob' pattern for finding GZDoom executables.");
                     ui.horizontal(|ui| {
-                        ui.label("See the ");
+                        ui.label("See the");
                         ui.hyperlink_to("glob", "https://docs.rs/glob/0.3.0/glob/");
-                        ui.label(" crate documentation for more info");
+                        ui.label("crate documentation for more info");
                     });
                 });
                 ui.end_row();
