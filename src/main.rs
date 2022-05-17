@@ -4,13 +4,12 @@ use std::{
     fs::{self, File},
     path::Path,
     iter,
-    rc::Rc,
 };
 #[cfg(not(target_family = "windows"))]
 use std::os::unix::fs::PermissionsExt;
 
-mod addon;
-use addon::{AddonMap, AddonSpecification};
+mod addon; use addon::{AddonMap, AddonSpecification};
+mod ephraim; use ephraim::{App, AppWindow};
 
 #[derive(Debug, Clone, Default)]
 struct AppOptions {
@@ -19,95 +18,23 @@ struct AppOptions {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    use glutin::{Api, GlRequest, dpi::{Size, LogicalSize}};
-    use egui_glow::{painter::Context, EguiGlow};
-    let el = glutin::event_loop::EventLoop::new();
-    let wb = glutin::window::WindowBuilder::new()
-        .with_title("Doom 64 CE launcher")
-        .with_inner_size(Size::new(LogicalSize::new(550.0f32, 300.0f32)));
-    let cb = glutin::ContextBuilder::new()
-        .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
-        .build_windowed(wb, &el)?;
-    let cb = unsafe { cb.make_current() }.map_err(|(_old_ctx, err)| err)?;
-    let ctx = Rc::from(unsafe {
-        Context::from_loader_function(|name| cb.get_proc_address(name)) });
-    let mut eguiglow = EguiGlow::new(cb.window(), Rc::clone(&ctx));
     let app_options = AppOptions {
         quit_on_launch: env::args().any(|arg| arg == "--quit-on-launch"),
         gzdoom_glob: env::args().skip_while(|arg| arg != "--gzdoom-glob").skip(1).next(),
         ..Default::default()
     };
     let addons = addon::get_addons(None);
-    let mut app: Box<dyn App> = match addons {
+    let app: Box<dyn App> = match addons {
         Ok(addons) => {
             Box::new(AddonManager::new(addons, app_options))
-            /*
-            eframe::run_native("Doom 64 CE launcher", options,
-                Box::new(move |_| Box::new(AddonManager::new(addons, app_options)))); */
         },
         Err(error) => {
             let message = format!("{:#?}", error);
             Box::new(ErrorMessage::from(message))
-            /*
-            eframe::run_native("Doom 64 CE launcher", options,
-                Box::new(|_| Box::new(ErrorMessage(message)))); */
         }
     };
-    el.run(move |event, _, control_flow| {
-        // Some code copied from https://github.com/emilk/egui/blob/master/egui_glow/examples/pure_glow.rs
-        let mut redraw = || {
-            use glutin::event_loop::ControlFlow;
-            let needs_repaint = eguiglow.run(cb.window(), |ctx| app.update(ctx));
-            let quit = app.quit();
-
-            *control_flow = if quit {
-                ControlFlow::Exit
-            } else if needs_repaint {
-                cb.window().request_redraw();
-                ControlFlow::Poll
-            } else {
-                ControlFlow::Wait
-            };
-
-            eguiglow.paint(cb.window());
-            cb.swap_buffers().unwrap();
-        };
-
-        // Copied from https://github.com/emilk/egui/blob/master/egui_glow/examples/pure_glow.rs
-        match event {
-            // Platform-dependent event handlers to workaround a winit bug
-            // See: https://github.com/rust-windowing/winit/issues/987
-            // See: https://github.com/rust-windowing/winit/issues/1619
-            glutin::event::Event::RedrawEventsCleared if cfg!(windows) => redraw(),
-            glutin::event::Event::RedrawRequested(_) if !cfg!(windows) => redraw(),
-
-            glutin::event::Event::WindowEvent { event, .. } => {
-                use glutin::event::WindowEvent;
-                if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
-                    *control_flow = glutin::event_loop::ControlFlow::Exit;
-                }
-
-                if let glutin::event::WindowEvent::Resized(physical_size) = &event {
-                    cb.resize(*physical_size);
-                } else if let glutin::event::WindowEvent::ScaleFactorChanged {
-                    new_inner_size,
-                    ..
-                } = &event
-                {
-                    cb.resize(**new_inner_size);
-                }
-
-                eguiglow.on_event(&event);
-
-                cb.window().request_redraw(); // TODO: ask egui if the events warrants a repaint instead
-            }
-            glutin::event::Event::LoopDestroyed => {
-                eguiglow.destroy();
-            }
-
-            _ => (),
-        }
-    });
+    let win = AppWindow::new(app)?;
+    win.run();
 }
 
 const S_IXOTH: u32 = 0o1;
@@ -244,11 +171,6 @@ impl AddonManager {
         });
         addon_files
     }
-}
-
-trait App {
-    fn update(&mut self, ctx: &egui::Context);
-    fn quit(&self) -> bool;
 }
 
 impl App for AddonManager {
