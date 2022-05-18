@@ -66,8 +66,9 @@ fn is_executable(path: &impl AsRef<Path>) -> bool {
 
 #[derive(Debug, Clone)]
 enum GZDoomBuildSelection {
-    ListIndex(usize),
-    FullPath(String),
+    Single, // Hide GZDoom build selector
+    ListIndex(usize), // Show a drop-down list
+    FullPath(String), // Show text box and "Browse" button
 }
 
 impl Default for GZDoomBuildSelection {
@@ -121,6 +122,7 @@ impl AddonManager {
             selected_primary_addon: 0,
             selected_secondary_addons,
             selected_gzdoom_build: match build_count {
+                1 => GZDoomBuildSelection::Single,
                 0 => GZDoomBuildSelection::FullPath(String::new()),
                 _ => GZDoomBuildSelection::ListIndex(0),
             },
@@ -130,6 +132,7 @@ impl AddonManager {
     }
     fn gzdoom_build(&self) -> &str {
         match &self.selected_gzdoom_build {
+            GZDoomBuildSelection::Single => self.builds.get(0).map(String::as_str).unwrap_or(""),
             GZDoomBuildSelection::ListIndex(index) => self.builds.get(*index).map(String::as_str).unwrap_or(""),
             GZDoomBuildSelection::FullPath(path) => path.as_str()
         }
@@ -177,6 +180,7 @@ impl App for AddonManager {
     fn update(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             match &mut self.selected_gzdoom_build {
+                GZDoomBuildSelection::Single => {},
                 GZDoomBuildSelection::ListIndex(bindex) => {
                     egui::ComboBox::from_label("GZDoom build")
                     .selected_text(self.builds.get(*bindex)
@@ -186,6 +190,7 @@ impl App for AddonManager {
                             ui.selectable_value(bindex, index, build);
                         });
                     });
+                    ui.separator();
                 },
                 GZDoomBuildSelection::FullPath(path) => {
                     ui.horizontal(|ui| {
@@ -204,10 +209,9 @@ impl App for AddonManager {
                             }
                         }
                     });
+                    ui.separator();
                 }
             }
-
-            ui.separator();
 
             egui::ComboBox::from_label("Primary addon")
             .selected_text(self.primary_addons.get(self.selected_primary_addon)
