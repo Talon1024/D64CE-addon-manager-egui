@@ -1,15 +1,18 @@
 use std::{
     error::Error,
     env,
-    fs::{self, File},
-    path::Path,
+    fs::File,
     iter,
 };
-#[cfg(not(target_family = "windows"))]
-use std::os::unix::fs::PermissionsExt;
 
-mod addon; use addon::{AddonMap, AddonSpecification};
-mod ephraim; use ephraim::{App, AppWindow};
+mod addon;
+mod command;
+mod ephraim;
+mod exe;
+
+use addon::{AddonMap, AddonSpecification};
+use ephraim::{App, AppWindow};
+use exe::is_executable;
 
 #[derive(Debug, Clone, Default)]
 struct AppOptions {
@@ -37,33 +40,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     win.run();
 }
 
-const S_IXOTH: u32 = 0o1;
-#[cfg(not(target_family = "windows"))]
-fn is_executable(path: &impl AsRef<Path>) -> bool {
-    // Linux/Unix uses a file permission bit
-    let metadata = fs::metadata(path);
-    match metadata {
-        Ok(m) => {
-            // let S_IXUSR = 0o100;
-            // let S_IXGRP = 0o10;
-            let mode = m.permissions().mode();
-            (mode & (S_IXOTH)) != 0
-        }
-        Err(_) => false
-    }
-}
-
-#[cfg(target_family = "windows")]
-fn is_executable(path: &impl AsRef<Path>) -> bool {
-    // Windows executables have certain extensions
-    let executable_extns = ["exe", "bat", "com"];
-    match path.extension() {
-        Some(ext) => {executable_extns.iter().any(
-            |extn| ext.eq_ignore_ascii_case(extn))},
-        None => false
-    }
-}
-
 #[derive(Debug, Clone)]
 enum GZDoomBuildSelection {
     Single, // Hide GZDoom build selector
@@ -89,6 +65,8 @@ struct AddonManager {
     quit_on_launch: bool,
     popup: Option<String>,
     quit: bool,
+    extra_args: String,
+    config_file: String,
 }
 
 impl AddonManager {
@@ -132,7 +110,7 @@ impl AddonManager {
     }
     fn gzdoom_build(&self) -> &str {
         match &self.selected_gzdoom_build {
-            GZDoomBuildSelection::Single => self.builds.get(0).map(String::as_str).unwrap_or(""),
+            GZDoomBuildSelection::Single => self.builds.get(0).map(String::as_str).expect("How did this happen?!"),
             GZDoomBuildSelection::ListIndex(index) => self.builds.get(*index).map(String::as_str).unwrap_or(""),
             GZDoomBuildSelection::FullPath(path) => path.as_str()
         }
@@ -230,6 +208,18 @@ impl App for AddonManager {
                 .for_each(|(selected, name)| {
                     ui.checkbox(selected, name);
                 });
+            });
+
+            ui.separator();
+
+            ui.horizontal(|ui| {
+                ui.label("Extra arguments:");
+                ui.text_edit_singleline(&mut self.extra_args);
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Configuration file name:");
+                ui.text_edit_singleline(&mut self.config_file);
             });
 
             ui.separator();
