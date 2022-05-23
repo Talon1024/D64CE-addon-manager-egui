@@ -1,11 +1,11 @@
 #[derive(Debug, Clone, Default)]
-pub struct RunInfo {
-	pub environment: Vec<(String, String)>,
-	pub new_executable: Option<String>,
-	pub arguments: Vec<String>
+pub struct RunInfo<'a> {
+	pub environment: Vec<(&'a str, &'a str)>,
+	pub new_executable: Option<&'a str>,
+	pub arguments: Vec<&'a str>
 }
 
-pub fn get_run_info(args: &str) -> RunInfo {
+pub fn get_run_info<'a>(args: &'a str, orig_exe: &'a str) -> RunInfo<'a> {
 	let command: Option<(&str, &str)> = args.split_once("%command%");
 	match command {
 		Some((prefix, suffix)) => {
@@ -17,8 +17,7 @@ pub fn get_run_info(args: &str) -> RunInfo {
 					let pair: Option<(&str, &str)> = arg.split_once('=');
 					match pair {
 						Some((key, val)) => {
-							run_info.environment.push(
-								(key.to_string(), val.to_string()));
+							run_info.environment.push((key, val));
 						},
 						None => {
 							parsing_env = false;
@@ -28,21 +27,21 @@ pub fn get_run_info(args: &str) -> RunInfo {
 				// These two "ifs" are separate so that arguments can be
 				// parsed after parsing_env is set to false
 				if !parsing_env {
-					let argstr = arg.to_string();
 					match run_info.new_executable {
-						Some(_) => { run_info.arguments.push(argstr); },
-						None => { run_info.new_executable.get_or_insert(argstr); }
+						Some(_) => { run_info.arguments.push(arg); },
+						None => { run_info.new_executable.get_or_insert(arg); }
 					}
 				}
 			});
+			run_info.arguments.push(orig_exe);
 			suffix.split_ascii_whitespace().for_each(|arg| {
-				run_info.arguments.push(arg.to_string());
+				run_info.arguments.push(arg);
 			});
 			run_info
 		},
 		None => {
 			RunInfo {
-				arguments: args.split_ascii_whitespace().map(str::to_string).collect(),
+				arguments: args.split_ascii_whitespace().collect(),
 				..Default::default()
 			}
 		}
@@ -56,23 +55,22 @@ mod tests {
 	#[test]
 	fn no_command() {
 		let arghs = "CUP=TEA FOOL=BARF mangohud booba.wad feet.wad";
-		let actual = get_run_info(arghs);
-		let expected_args: Vec<String> = ["CUP=TEA", "FOOL=BARF", "mangohud", "booba.wad", "feet.wad"].map(str::to_string).to_vec();
+		let actual = get_run_info(arghs, "gzdoom");
+		let expected_args = vec!["CUP=TEA", "FOOL=BARF", "mangohud", "booba.wad", "feet.wad"];
 		assert_eq!(actual.arguments, expected_args);
 	}
 
 	#[test]
 	fn yes_command() {
 		let arghs = "CUP=TEA FOOL=BARF mangohud %command% booba.wad feet.wad";
-		let actual = get_run_info(arghs);
-		let expected_env = ["CUP=TEA", "FOOL=BARF"].map(str::to_string).to_vec();
-		let expected_exe = Some(String::from("mangohud")); 
-		let expected_args = ["booba.wad", "feet.wad"].map(str::to_string).to_vec();
+		let actual = get_run_info(arghs, "gzdoom");
+		let expected_env: Vec<(&str, &str)> = vec![("CUP","TEA"), ("FOOL","BARF")];
+		let expected_exe = Some("mangohud");
+		let expected_args = vec!["gzdoom", "booba.wad", "feet.wad"];
 		assert_eq!(actual.arguments, expected_args);
 		assert_eq!(actual.new_executable, expected_exe);
-		actual.environment.iter().for_each(|(key, val)| {
-			let pairstr = format!("{}={}", key, val);
-			assert!(expected_env.contains(&pairstr));
+		actual.environment.iter().zip(expected_env.iter()).for_each(|(key, val)| {
+			assert_eq!(key, val);
 		});
 	}
 }

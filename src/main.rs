@@ -65,8 +65,8 @@ struct AddonManager {
     quit_on_launch: bool,
     popup: Option<String>,
     quit: bool,
-    extra_args: String,
-    config_file: String,
+    exargs: String,
+    config: String,
 }
 
 impl AddonManager {
@@ -214,12 +214,17 @@ impl App for AddonManager {
 
             ui.horizontal(|ui| {
                 ui.label("Extra arguments:");
-                ui.text_edit_singleline(&mut self.extra_args);
+                ui.text_edit_singleline(&mut self.exargs).on_hover_ui(|ui| {
+                    ui.label("You can use %command% to set environment variables");
+                    ui.label("and/or run GZDoom under another executable, just like");
+                    ui.label("the Steam launch options. See this for more information:");
+                    ui.hyperlink("https://superuser.com/questions/954041");
+                });
             });
 
             ui.horizontal(|ui| {
                 ui.label("Configuration file name:");
-                ui.text_edit_singleline(&mut self.config_file);
+                ui.text_edit_singleline(&mut self.config);
             });
 
             ui.separator();

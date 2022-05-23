@@ -90,6 +90,12 @@ impl AppWindow {
 	
 				_ => (),
 			}
+
+			/*
+			if *control_flow == glutin::event_loop::ControlFlow::Exit {
+				// println!("exit");
+			}
+			*/
 		});
 	}
 }
