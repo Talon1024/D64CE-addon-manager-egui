@@ -5,6 +5,7 @@ use std::{
     io::Write,
     fs::{self, File, OpenOptions},
     iter, collections::HashMap,
+    process::Command,
 };
 use serde::{Serialize, Deserialize};
 
@@ -17,6 +18,7 @@ mod apps;
 use apps::error::ErrorMessage;
 use addon::{AddonMap, AddonSpecification};
 use ephraim::{App, AppWindow};
+use command::*;
 use checks::*;
 
 #[derive(Debug, Clone, Default)]
@@ -394,11 +396,21 @@ impl App for AddonManager {
             ui.horizontal(|ui| {
                 if ui.button("Launch").clicked() {
                     let gzdoom_build = self.gzdoom_build();
+                    let run_info = get_run_info(&self.exargs, gzdoom_build);
                     let primary_addon = self.primary_addon();
                     let secondary_addons = self.secondary_addons();
-                    println!("{}", gzdoom_build);
-                    print!("{}", primary_addon);
-                    println!("{}", secondary_addons);
+                    match Command::new(run_info.new_executable.unwrap_or(gzdoom_build))
+                    .envs(env::vars())
+                    .envs(run_info.environment)
+                    .args(run_info.arguments)
+                    .args(["-config", &self.config, "-file"])
+                    .args(primary_addon.split_ascii_whitespace())
+                    .args(secondary_addons.split_ascii_whitespace()).spawn() {
+                        Ok(_) => {},
+                        Err(e) => {
+                            self.popup = Some(format!("Could not launch GZDoom:\n{:?}", e));
+                        },
+                    }
                     if self.quit_on_launch {
                         self.quit = true;
                     }
