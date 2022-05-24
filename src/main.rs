@@ -126,8 +126,8 @@ impl AddonManager {
             addon.secondary.is_some()
         }).map(|(name, _addon)| name.clone()).collect();
         let mut selected_secondary_addons: Box<[bool]> = Box::from_iter(secondary_addons.iter().map(|_| true));
-        let gpat = app_options.gzdoom_glob.unwrap_or(String::new());
-        let builds: Box<[String]> = match glob::glob(&gpat) {
+        let bpat = app_options.gzdoom_glob.unwrap_or(String::new());
+        let builds: Box<[String]> = match glob::glob(&bpat) {
             Ok(paths) => paths
                 .filter_map(Result::ok)
                 .filter_map(|p| {
@@ -139,6 +139,7 @@ impl AddonManager {
                 .collect(),
             Err(_e) => Box::from([])
         };
+        let build_count = builds.len();
         let ipat = app_options.iwad_glob.unwrap_or(String::new());
         let iwads: Box<[String]> = match glob::glob(&ipat) {
             Ok(paths) => paths
@@ -152,7 +153,7 @@ impl AddonManager {
             .collect(),
             Err(_e) => Box::from([])
         };
-        let build_count = builds.len();
+        let iwad_count = iwads.len();
 
         // STEP: Load configuration
         let mut cfg_path = dirs::config_dir().unwrap_or(
@@ -170,6 +171,11 @@ impl AddonManager {
             0 => GZDoomBuildSelection::FullPath(String::new()),
             _ => GZDoomBuildSelection::ListIndex(0),
         };
+        let mut selected_iwad = match iwad_count {
+            1 => GZDoomBuildSelection::Single,
+            0 => GZDoomBuildSelection::FullPath(String::new()),
+            _ => GZDoomBuildSelection::ListIndex(0),
+        };
         let mut exargs = String::new();
         let mut config = String::new();
         if let Some(data) = data {
@@ -181,6 +187,17 @@ impl AddonManager {
                     },
                     GZDoomBuildSelection::FullPath(ref mut path) => {
                         *path = gzdoom;
+                    },
+                }
+            }
+            if let Some(iwad) = data.iwad {
+                match selected_iwad {
+                    GZDoomBuildSelection::Single => (),
+                    GZDoomBuildSelection::ListIndex(ref mut index) => {
+                        *index = iwads.iter().position(|wad| wad == &iwad).unwrap_or_default();
+                    },
+                    GZDoomBuildSelection::FullPath(ref mut path) => {
+                        *path = iwad;
                     },
                 }
             }
@@ -209,6 +226,7 @@ impl AddonManager {
             selected_primary_addon,
             selected_secondary_addons,
             selected_gzdoom_build,
+            selected_iwad,
             quit_on_launch: app_options.quit_on_launch,
             exargs, config,
             ..Default::default()
