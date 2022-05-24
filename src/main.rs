@@ -380,7 +380,7 @@ impl App for AddonManager {
                     ui.label("You can use %command% to set environment variables");
                     ui.label("and/or run GZDoom under another executable, just like");
                     ui.label("the Steam launch options. See this for more information:");
-                    ui.hyperlink("https://superuser.com/questions/954041");
+                    ui.hyperlink("https://superuser.com/q/954041");
                 });
             });
 
