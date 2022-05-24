@@ -1,15 +1,20 @@
 use std::{
     error::Error,
     env,
-    fs::File,
-    iter,
+    path::MAIN_SEPARATOR,
+    io::Write,
+    fs::{self, File, OpenOptions},
+    iter, collections::HashMap,
 };
+use serde::{Serialize, Deserialize};
 
 mod addon;
 mod command;
 mod ephraim;
 mod exe;
+mod apps;
 
+use apps::error::ErrorMessage;
 use addon::{AddonMap, AddonSpecification};
 use ephraim::{App, AppWindow};
 use exe::is_executable;
@@ -67,6 +72,15 @@ struct AddonManager {
     quit: bool,
     exargs: String,
     config: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct Persistence {
+    gzdoom_build: Option<String>,
+    primary_addon: Option<String>,
+    secondary_addons: Option<HashMap<String, bool>>,
+    exargs: Option<String>,
+    config: Option<String>,
 }
 
 impl AddonManager {
@@ -266,50 +280,53 @@ impl App for AddonManager {
     fn quit(&self) -> bool {
         self.quit
     }
-}
-
-struct ErrorMessage(String, bool);
-impl From<String> for ErrorMessage {
-    fn from(s: String) -> Self {
-        ErrorMessage(s, false)
-    }
-}
-impl App for ErrorMessage {
-    fn update(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Error!");
-            ui.label(&self.0);
-            ui.separator();
-            ui.label("This program is a helper for Doom mod launcher scripts.");
-            ui.label("Users may select one primary addon, and any secondary addons.");
-            ui.horizontal(|ui| {
-                ui.label("This program reads addon information from");
-                ui.code("addons.yml");
-                ui.label(". This file should");
-            });
-            ui.label("be in the directory you launched this program from.");
-            ui.label("Supported command line arguments:");
-            egui::Grid::new("command_line_arguments").show(ui, |ui| {
-                ui.code("--gzdoom-glob ptn");
-                ui.vertical(|ui| {
-                    ui.label("A 'glob' pattern for finding GZDoom executables.");
-                    ui.horizontal(|ui| {
-                        ui.label("See the");
-                        ui.hyperlink_to("glob", "https://docs.rs/glob/0.3.0/glob/");
-                        ui.label("crate documentation for more info");
-                    });
-                });
-                ui.end_row();
-                ui.code("--quit-on-launch");
-                ui.label("Quit this program when you launch the game.");
-                ui.end_row();
-            });
-            if ui.button("Exit").clicked() {
-                self.1 = true;
-            }
-        });
-    }
-    fn quit(&self) -> bool {
-        self.1
+    fn on_quit(&mut self) {
+        let data = Persistence {
+            gzdoom_build: Some(String::from(self.gzdoom_build())),
+            primary_addon: match self.selected_primary_addon {
+                0 => None,
+                _ => Some(self.primary_addons
+                    [self.selected_primary_addon].clone())
+            },
+            secondary_addons: match self.secondary_addons.len() {
+                0 => None,
+                _ => Some(self.secondary_addons
+                    .iter().cloned().zip(self.selected_secondary_addons
+                    .iter().cloned()).collect())},
+            exargs: match self.exargs.len() {
+                0 => None, _ => Some(self.exargs.clone())
+            },
+            config: match self.config.len() {
+                0 => None, _ => Some(self.config.clone())
+            },
+        };
+        let mut cfg_path = dirs::config_dir().unwrap_or(
+            dirs::home_dir().unwrap_or(
+            env::current_dir().unwrap()));
+        cfg_path.push(&format!("Talon1024{0}Addon Manager{0}", MAIN_SEPARATOR));
+        if let Err(e) = fs::create_dir_all(&cfg_path) {
+            eprintln!("Could not save settings:\n{:?}", e);
+            return;
+        }
+        cfg_path.push("addon_manager.yml");
+        let yaml = serde_yaml::to_string(&data);
+        match yaml {
+            Ok(yaml) => {
+                let file = OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(cfg_path);
+                match file {
+                    Ok(mut f) => {
+                        if let Err(e) = f.write_all(&yaml.into_bytes()) {
+                            eprintln!("Could not save settings:\n{:?}", e);
+                        }
+                    },
+                    Err(e) => {eprintln!("Could not save settings:\n{:?}", e);}
+                }
+            },
+            Err(e) => {eprintln!("Could not save settings:\n{:?}", e);}
+        }
     }
 }

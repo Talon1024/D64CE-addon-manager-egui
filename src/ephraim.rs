@@ -6,8 +6,9 @@ use glutin::{event_loop::EventLoop, WindowedContext, PossiblyCurrent};
 use std::{error::Error, rc::Rc};
 
 pub trait App {
-    fn update(&mut self, ctx: &egui::Context);
-    fn quit(&self) -> bool;
+	fn update(&mut self, ctx: &egui::Context);
+	fn quit(&self) -> bool;
+	fn on_quit(&mut self) {}
 }
 
 pub struct AppWindow {
@@ -36,6 +37,7 @@ impl AppWindow {
 		})
 	}
 	pub fn run(mut self) -> ! {
+		let mut on_quit_called = false;
 		self.el.run(move |event, _, control_flow| {
 			// Some code copied from https://github.com/emilk/egui/blob/master/egui_glow/examples/pure_glow.rs
 			let mut redraw = || {
@@ -91,11 +93,10 @@ impl AppWindow {
 				_ => (),
 			}
 
-			/*
-			if *control_flow == glutin::event_loop::ControlFlow::Exit {
-				// println!("exit");
+			if *control_flow == glutin::event_loop::ControlFlow::Exit && !on_quit_called {
+				self.app.on_quit();
+				on_quit_called = true;
 			}
-			*/
 		});
 	}
 }

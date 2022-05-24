@@ -13,3 +13,4 @@ native-dialog = "0.6.3"
 serde = {version = "1.0", features = ["derive"]}
 serde_yaml = "0.8.24"
 glob = "0.3.0"
+dirs = "4.0.0"

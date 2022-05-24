@@ -73,4 +73,18 @@ mod tests {
 			assert_eq!(key, val);
 		});
 	}
+
+	#[test]
+	fn no_suffix() {
+		let arghs = "ENABLE_VKBASALT=1 mangohud %command%";
+		let actual = get_run_info(arghs, "gzdoom");
+		let expected_env: Vec<(&str, &str)> = vec![("ENABLE_VKBASALT","1")];
+		let expected_exe = Some("mangohud");
+		let expected_args = vec!["gzdoom"];
+		assert_eq!(actual.arguments, expected_args);
+		assert_eq!(actual.new_executable, expected_exe);
+		actual.environment.iter().zip(expected_env.iter()).for_each(|(key, val)| {
+			assert_eq!(key, val);
+		});
+	}
 }
