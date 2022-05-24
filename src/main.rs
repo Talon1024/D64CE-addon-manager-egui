@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     env,
-    path::MAIN_SEPARATOR,
+    path::MAIN_SEPARATOR as DSEP,
     io::Write,
     fs::{self, File, OpenOptions},
     iter, collections::HashMap,
@@ -83,6 +83,30 @@ struct Persistence {
     config: Option<String>,
 }
 
+impl From<&AddonManager> for Persistence {
+    fn from(v: &AddonManager) -> Self {
+        Persistence {
+            gzdoom_build: Some(String::from(v.gzdoom_build())),
+            primary_addon: match v.selected_primary_addon {
+                0 => None,
+                _ => Some(v.primary_addons
+                    [v.selected_primary_addon].clone())
+            },
+            secondary_addons: match v.secondary_addons.len() {
+                0 => None,
+                _ => Some(v.secondary_addons
+                    .iter().cloned().zip(v.selected_secondary_addons
+                    .iter().cloned()).collect())},
+            exargs: match v.exargs.len() {
+                0 => None, _ => Some(v.exargs.clone())
+            },
+            config: match v.config.len() {
+                0 => None, _ => Some(v.config.clone())
+            },
+        }
+    }
+}
+
 impl AddonManager {
     pub fn new(addons: AddonMap, app_options: AppOptions) -> AddonManager {
         let primary_addons: Box<[String]> = iter::once(String::from("None")).chain(addons.iter().filter(|(_name, addon)| {
@@ -91,7 +115,7 @@ impl AddonManager {
         let secondary_addons: Box<[String]> = addons.iter().filter(|(_name, addon)| {
             addon.secondary.is_some()
         }).map(|(name, _addon)| name.clone()).collect();
-        let selected_secondary_addons: Box<[bool]> = Box::from_iter(secondary_addons.iter().map(|_| true));
+        let mut selected_secondary_addons: Box<[bool]> = Box::from_iter(secondary_addons.iter().map(|_| true));
         let pat = app_options.gzdoom_glob.unwrap_or(String::from(""));
         let builds: Box<[String]> = match glob::glob(&pat) {
             Ok(paths) => paths
@@ -106,19 +130,63 @@ impl AddonManager {
             Err(_e) => Box::from([])
         };
         let build_count = builds.len();
+
+        // STEP: Load configuration
+        let mut cfg_path = dirs::config_dir().unwrap_or(
+            dirs::home_dir().unwrap_or(
+            env::current_dir().unwrap()));
+        cfg_path.push(&format!("Talon1024{0}Addon Manager{0}addon_manager.yml", DSEP));
+        let data = if let Ok(cfg_file) = File::open(cfg_path) {
+            serde_yaml::from_reader::<File, Persistence>(cfg_file).ok()
+        } else {
+            None
+        };
+        let mut selected_primary_addon = 0;
+        let mut selected_gzdoom_build = match build_count {
+            1 => GZDoomBuildSelection::Single,
+            0 => GZDoomBuildSelection::FullPath(String::new()),
+            _ => GZDoomBuildSelection::ListIndex(0),
+        };
+        let mut exargs = String::new();
+        let mut config = String::new();
+        if let Some(data) = data {
+            if let Some(gzdoom) = data.gzdoom_build {
+                match selected_gzdoom_build {
+                    GZDoomBuildSelection::Single => (),
+                    GZDoomBuildSelection::ListIndex(ref mut index) => {
+                        *index = builds.iter().position(|build| build == &gzdoom).unwrap_or_default();
+                    },
+                    GZDoomBuildSelection::FullPath(ref mut path) => {
+                        *path = gzdoom;
+                    },
+                }
+            }
+            if let Some(padd) = data.primary_addon {
+                selected_primary_addon = primary_addons.iter().position(|addon| addon == &padd).unwrap_or_default();
+            }
+            if let Some(sadd) = data.secondary_addons {
+                secondary_addons.iter().zip(selected_secondary_addons.iter_mut()).for_each(|(key, val)| {
+                    *val = *sadd.get(key).unwrap_or(&true);
+                });
+            }
+            if let Some(args) = data.exargs {
+                exargs = args;
+            }
+            if let Some(ini) = data.config {
+                config = ini;
+            }
+        };
+
         AddonManager {
             builds,
             primary_addons,
             secondary_addons,
             addons,
-            selected_primary_addon: 0,
+            selected_primary_addon,
             selected_secondary_addons,
-            selected_gzdoom_build: match build_count {
-                1 => GZDoomBuildSelection::Single,
-                0 => GZDoomBuildSelection::FullPath(String::new()),
-                _ => GZDoomBuildSelection::ListIndex(0),
-            },
+            selected_gzdoom_build,
             quit_on_launch: app_options.quit_on_launch,
+            exargs, config,
             ..Default::default()
         }
     }
@@ -281,29 +349,12 @@ impl App for AddonManager {
         self.quit
     }
     fn on_quit(&mut self) {
-        let data = Persistence {
-            gzdoom_build: Some(String::from(self.gzdoom_build())),
-            primary_addon: match self.selected_primary_addon {
-                0 => None,
-                _ => Some(self.primary_addons
-                    [self.selected_primary_addon].clone())
-            },
-            secondary_addons: match self.secondary_addons.len() {
-                0 => None,
-                _ => Some(self.secondary_addons
-                    .iter().cloned().zip(self.selected_secondary_addons
-                    .iter().cloned()).collect())},
-            exargs: match self.exargs.len() {
-                0 => None, _ => Some(self.exargs.clone())
-            },
-            config: match self.config.len() {
-                0 => None, _ => Some(self.config.clone())
-            },
-        };
+        // Mutable to immutable reference
+        let data = Persistence::from(&*self);
         let mut cfg_path = dirs::config_dir().unwrap_or(
             dirs::home_dir().unwrap_or(
             env::current_dir().unwrap()));
-        cfg_path.push(&format!("Talon1024{0}Addon Manager{0}", MAIN_SEPARATOR));
+        cfg_path.push(&format!("Talon1024{0}Addon Manager{0}", DSEP));
         if let Err(e) = fs::create_dir_all(&cfg_path) {
             eprintln!("Could not save settings:\n{:?}", e);
             return;
