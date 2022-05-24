@@ -406,7 +406,11 @@ impl App for AddonManager {
                     .args(["-config", &self.config, "-file"])
                     .args(primary_addon.split_ascii_whitespace())
                     .args(secondary_addons.split_ascii_whitespace()).spawn() {
-                        Ok(_) => {},
+                        Ok(mut child) => {
+                            if let Err(e) = child.wait() {
+                                self.popup = Some(format!("Failed to wait on child process:\n{:?}", e));
+                            }
+                        },
                         Err(e) => {
                             self.popup = Some(format!("Could not launch GZDoom:\n{:?}", e));
                         },
