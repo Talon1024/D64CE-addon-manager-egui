@@ -1,6 +1,7 @@
 use std::{
 	path::Path,
-	fs,
+	fs::{self, File},
+    io::Read
 };
 #[cfg(not(target_family = "windows"))]
 use std::os::unix::fs::PermissionsExt;
@@ -29,5 +30,21 @@ pub fn is_executable(path: &impl AsRef<Path>) -> bool {
         Some(ext) => {executable_extns.iter().any(
             |extn| ext.eq_ignore_ascii_case(extn))},
         None => false
+    }
+}
+
+pub fn is_iwad(path: &impl AsRef<Path>) -> bool {
+    let iwad = b"IWAD";
+    let mut magic: [u8; 4] = [0; 4];
+    match File::open(path) {
+        Ok(mut f) => {
+            let ok = f.read_exact(&mut magic).is_ok();
+            if !ok { return false; }
+            &magic == iwad
+        },
+        Err(e) => {
+            eprintln!("{:?}", e);
+            false
+        },
     }
 }

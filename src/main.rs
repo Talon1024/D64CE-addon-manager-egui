@@ -11,24 +11,26 @@ use serde::{Serialize, Deserialize};
 mod addon;
 mod command;
 mod ephraim;
-mod exe;
+mod checks;
 mod apps;
 
 use apps::error::ErrorMessage;
 use addon::{AddonMap, AddonSpecification};
 use ephraim::{App, AppWindow};
-use exe::is_executable;
+use checks::*;
 
 #[derive(Debug, Clone, Default)]
 struct AppOptions {
     quit_on_launch: bool,
     gzdoom_glob: Option<String>,
+    iwad_glob: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let app_options = AppOptions {
         quit_on_launch: env::args().any(|arg| arg == "--quit-on-launch"),
         gzdoom_glob: env::args().skip_while(|arg| arg != "--gzdoom-glob").skip(1).next(),
+        iwad_glob: env::args().skip_while(|arg| arg != "--iwad-glob").skip(1).next(),
         ..Default::default()
     };
     let addons = addon::get_addons(None);
@@ -61,12 +63,14 @@ impl Default for GZDoomBuildSelection {
 #[derive(Debug, Clone, Default)]
 struct AddonManager {
     builds: Box<[String]>,
+    iwads: Box<[String]>,
     addons: AddonMap,
     primary_addons: Box<[String]>,
     secondary_addons: Box<[String]>,
     selected_primary_addon: usize,
     selected_secondary_addons: Box<[bool]>,
     selected_gzdoom_build: GZDoomBuildSelection,
+    selected_iwad: GZDoomBuildSelection,
     quit_on_launch: bool,
     popup: Option<String>,
     quit: bool,
@@ -81,6 +85,7 @@ struct Persistence {
     secondary_addons: Option<HashMap<String, bool>>,
     exargs: Option<String>,
     config: Option<String>,
+    iwad: Option<String>,
 }
 
 impl From<&AddonManager> for Persistence {
@@ -103,6 +108,11 @@ impl From<&AddonManager> for Persistence {
             config: match v.config.len() {
                 0 => None, _ => Some(v.config.clone())
             },
+            iwad: Some(match v.selected_iwad {
+                GZDoomBuildSelection::Single => &v.iwads[0],
+                GZDoomBuildSelection::ListIndex(i) => &v.iwads[i],
+                GZDoomBuildSelection::FullPath(ref path) => path,
+            }.clone())
         }
     }
 }
@@ -116,8 +126,8 @@ impl AddonManager {
             addon.secondary.is_some()
         }).map(|(name, _addon)| name.clone()).collect();
         let mut selected_secondary_addons: Box<[bool]> = Box::from_iter(secondary_addons.iter().map(|_| true));
-        let pat = app_options.gzdoom_glob.unwrap_or(String::from(""));
-        let builds: Box<[String]> = match glob::glob(&pat) {
+        let gpat = app_options.gzdoom_glob.unwrap_or(String::new());
+        let builds: Box<[String]> = match glob::glob(&gpat) {
             Ok(paths) => paths
                 .filter_map(Result::ok)
                 .filter_map(|p| {
@@ -127,6 +137,19 @@ impl AddonManager {
                     }
                 })
                 .collect(),
+            Err(_e) => Box::from([])
+        };
+        let ipat = app_options.iwad_glob.unwrap_or(String::new());
+        let iwads: Box<[String]> = match glob::glob(&ipat) {
+            Ok(paths) => paths
+            .filter_map(Result::ok)
+            .filter_map(|p| {
+                match is_executable(&p) {
+                    true => Some(p.to_str().unwrap_or("").to_string()),
+                    false => None
+                }
+            })
+            .collect(),
             Err(_e) => Box::from([])
         };
         let build_count = builds.len();
@@ -179,6 +202,7 @@ impl AddonManager {
 
         AddonManager {
             builds,
+            iwads,
             primary_addons,
             secondary_addons,
             addons,
@@ -266,6 +290,44 @@ impl App for AddonManager {
                                         self.popup = Some(format!("{:?} is not executable!", choice));
                                     }
                                 }
+                            } else {
+                                self.popup = Some(format!("File browser unavailable"));
+                            }
+                        }
+                    });
+                    ui.separator();
+                }
+            }
+
+            match &mut self.selected_iwad {
+                GZDoomBuildSelection::Single => {},
+                GZDoomBuildSelection::ListIndex(bindex) => {
+                    egui::ComboBox::from_label("IWAD")
+                    .selected_text(self.builds.get(*bindex)
+                        .unwrap_or(&String::from("None")))
+                    .width(400.).show_ui(ui, |ui| {
+                        self.builds.iter().enumerate().for_each(|(index, build)| {
+                            ui.selectable_value(bindex, index, build);
+                        });
+                    });
+                    ui.separator();
+                },
+                GZDoomBuildSelection::FullPath(path) => {
+                    ui.horizontal(|ui| {
+                        ui.label("IWAD:");
+                        ui.add(egui::TextEdit::singleline(path));
+                        if ui.button("Browse").clicked() {
+                            if let Ok(choice) = native_dialog::FileDialog::new()
+                            .show_open_single_file() {
+                                if let Some(choice) = choice {
+                                    if is_iwad(&choice) {
+                                        *path = String::from(choice.to_str().unwrap_or(""));
+                                    } else {
+                                        self.popup = Some(format!("{:?} is not an IWAD!", choice));
+                                    }
+                                }
+                            } else {
+                                self.popup = Some(format!("File browser unavailable"));
                             }
                         }
                     });
@@ -285,7 +347,7 @@ impl App for AddonManager {
             ui.separator();
 
             egui::CollapsingHeader::new("Secondary addons")
-            .default_open(true).show(ui, |ui| {
+            .default_open(self.secondary_addons.len() <= 5).show(ui, |ui| {
                 self.selected_secondary_addons.iter_mut().zip(self.secondary_addons.iter())
                 .for_each(|(selected, name)| {
                     ui.checkbox(selected, name);
