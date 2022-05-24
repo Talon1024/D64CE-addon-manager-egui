@@ -145,7 +145,7 @@ impl AddonManager {
             Ok(paths) => paths
             .filter_map(Result::ok)
             .filter_map(|p| {
-                match is_executable(&p) {
+                match is_iwad(&p) {
                     true => Some(p.to_str().unwrap_or("").to_string()),
                     false => None
                 }
