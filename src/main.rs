@@ -241,6 +241,13 @@ impl AddonManager {
             GZDoomBuildSelection::FullPath(path) => path.as_str()
         }
     }
+    fn iwad(&self) -> &str {
+        match &self.selected_iwad {
+            GZDoomBuildSelection::Single => self.iwads.get(0).map(String::as_str).expect("How did this happen?!"),
+            GZDoomBuildSelection::ListIndex(index) => self.iwads.get(*index).map(String::as_str).unwrap_or(""),
+            GZDoomBuildSelection::FullPath(path) => path.as_str()
+        }
+    }
     fn files_for_addon(&self, addon: Option<&AddonSpecification>) -> String {
         match addon {
             Some(addon) => {
@@ -403,7 +410,7 @@ impl App for AddonManager {
                     .envs(env::vars())
                     .envs(run_info.environment)
                     .args(run_info.arguments)
-                    .args(["-config", &self.config, "-file"])
+                    .args(["-iwad", &self.iwad(), "-config", &self.config, "-file"])
                     .args(primary_addon.split_ascii_whitespace())
                     .args(secondary_addons.split_ascii_whitespace()).spawn() {
                         Ok(mut child) => {
