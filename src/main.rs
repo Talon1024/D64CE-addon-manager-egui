@@ -248,40 +248,39 @@ impl AddonManager {
             GZDoomBuildSelection::FullPath(path) => path.as_str()
         }
     }
-    fn files_for_addon(&self, addon: Option<&AddonSpecification>) -> String {
+    fn files_for_addon(&self, addon: Option<&AddonSpecification>) -> Vec<String> {
         match addon {
             Some(addon) => {
-                let mut files = String::new();
+                let mut files = vec![];
                 for file in &addon.required {
-                    files.push_str(file);
-                    files.push_str("     ");
+                    // TODO: Un-clone?
+                    files.push(file.clone());
                 }
                 if let Some(optional) = &addon.optional {
                     for file in optional {
                         if File::open(file).is_ok() {
-                            files.push_str(file);
-                            files.push_str("     ");
+                            files.push(file.clone());
                         }
                     }
                 }
                 files
             },
-            None => String::from(""),
+            None => vec![],
         }
     }
-    fn primary_addon(&self) -> String {
+    fn primary_addon(&self) -> Vec<String> {
         let name = self.primary_addons.get(self.selected_primary_addon).map(String::as_str).unwrap_or("");
         let addon = self.addons.get(name);
         self.files_for_addon(addon)
     }
-    fn secondary_addons(&self) -> String {
+    fn secondary_addons(&self) -> Vec<String> {
         let addons: Vec<String> = self.secondary_addons.iter().zip(self.selected_secondary_addons.iter())
         .filter_map(|(addon, &selected)| if selected {Some(addon)} else {None})
         .cloned().collect();
-        let mut addon_files = String::new();
+        let mut addon_files = vec![];
         addons.iter().for_each(|addon| {
             let addon = self.addons.get(addon);
-            addon_files.push_str(&self.files_for_addon(addon));
+            addon_files.extend(self.files_for_addon(addon).into_iter());
         });
         addon_files
     }
@@ -411,8 +410,8 @@ impl App for AddonManager {
                     .envs(run_info.environment)
                     .args(run_info.arguments)
                     .args(["-iwad", &self.iwad(), "-config", &self.config, "-file"])
-                    .args(primary_addon.split_ascii_whitespace())
-                    .args(secondary_addons.split_ascii_whitespace()).spawn() {
+                    .args(primary_addon)
+                    .args(secondary_addons).spawn() {
                         Ok(mut child) => {
                             if let Err(e) = child.wait() {
                                 self.popup = Some(format!("Failed to wait on child process:\n{:?}", e));
