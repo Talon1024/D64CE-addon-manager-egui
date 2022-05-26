@@ -134,7 +134,7 @@ impl AddonManager {
                 .filter_map(Result::ok)
                 .filter_map(|p| {
                     match is_executable(&p) {
-                        true => Some(p.to_str().unwrap_or("").to_string()),
+                        true => p.to_str().map(str::to_string),
                         false => None
                     }
                 })
@@ -148,7 +148,7 @@ impl AddonManager {
             .filter_map(Result::ok)
             .filter_map(|p| {
                 match is_iwad(&p) {
-                    true => Some(p.to_str().unwrap_or("").to_string()),
+                    true => p.to_str().map(str::to_string),
                     false => None
                 }
             })
@@ -248,18 +248,17 @@ impl AddonManager {
             GZDoomBuildSelection::FullPath(path) => path.as_str()
         }
     }
-    fn files_for_addon(&self, addon: Option<&AddonSpecification>) -> Vec<String> {
+    fn files_for_addon<'a>(&'a self, addon: Option<&'a AddonSpecification>) -> Vec<&'a String> {
         match addon {
             Some(addon) => {
                 let mut files = vec![];
                 for file in &addon.required {
-                    // TODO: Un-clone?
-                    files.push(file.clone());
+                    files.push(file);
                 }
                 if let Some(optional) = &addon.optional {
                     for file in optional {
                         if File::open(file).is_ok() {
-                            files.push(file.clone());
+                            files.push(file);
                         }
                     }
                 }
@@ -268,12 +267,12 @@ impl AddonManager {
             None => vec![],
         }
     }
-    fn primary_addon(&self) -> Vec<String> {
+    fn primary_addon<'a>(&'a self) -> Vec<&'a String> {
         let name = self.primary_addons.get(self.selected_primary_addon).map(String::as_str).unwrap_or("");
         let addon = self.addons.get(name);
         self.files_for_addon(addon)
     }
-    fn secondary_addons(&self) -> Vec<String> {
+    fn secondary_addons<'a>(&'a self) -> Vec<&'a String> {
         let addons: Vec<String> = self.secondary_addons.iter().zip(self.selected_secondary_addons.iter())
         .filter_map(|(addon, &selected)| if selected {Some(addon)} else {None})
         .cloned().collect();
