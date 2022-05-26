@@ -400,15 +400,26 @@ impl App for AddonManager {
 
             ui.horizontal(|ui| {
                 if ui.button("Launch").clicked() {
-                    let gzdoom_build = self.gzdoom_build();
-                    let run_info = get_run_info(&self.exargs, gzdoom_build);
+                    let gzdoom = self.gzdoom_build().to_owned();
+                    let iwad = self.iwad().to_owned();
+                    let mut ok = true;
+                    if ok && File::open(&gzdoom).is_err() {
+                        self.popup = Some(String::from("Cannot open GZDoom build"));
+                        ok = false;
+                    }
+                    if ok && File::open(&iwad).is_err() {
+                        self.popup = Some(String::from("Cannot open IWAD"));
+                        ok = false;
+                    }
+                    if ok {
+                    let run_info = get_run_info(&self.exargs, &gzdoom);
                     let primary_addon = self.primary_addon();
                     let secondary_addons = self.secondary_addons();
-                    match Command::new(run_info.new_executable.unwrap_or(gzdoom_build))
+                    match Command::new(run_info.new_executable.unwrap_or(&gzdoom))
                     .envs(env::vars())
                     .envs(run_info.environment)
                     .args(run_info.arguments)
-                    .args(["-iwad", &self.iwad(), "-config", &self.config, "-file"])
+                    .args(["-iwad", &iwad, "-config", &self.config, "-file"])
                     .args(primary_addon)
                     .args(secondary_addons).spawn() {
                         Ok(mut child) => {
@@ -422,6 +433,7 @@ impl App for AddonManager {
                     }
                     if self.quit_on_launch {
                         self.quit = true;
+                    }
                     }
                 }
 
