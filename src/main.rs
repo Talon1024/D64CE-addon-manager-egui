@@ -407,8 +407,18 @@ impl App for AddonManager {
                         self.popup = Some(String::from("Cannot open GZDoom build"));
                         ok = false;
                     }
+                    if ok && !is_executable(&gzdoom) {
+                        self.popup = Some(String::from(
+                            "Selected GZDoom build is not an executable!"));
+                        ok = false;
+                    }
                     if ok && File::open(&iwad).is_err() {
                         self.popup = Some(String::from("Cannot open IWAD"));
+                        ok = false;
+                    }
+                    if ok && !is_iwad(&iwad) {
+                        self.popup = Some(String::from(
+                            "Selected IWAD is not an IWAD!"));
                         ok = false;
                     }
                     if ok {
