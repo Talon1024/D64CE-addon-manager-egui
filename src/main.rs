@@ -284,8 +284,8 @@ impl AddonManager {
         addon_files
     }
     fn try_launch<'a>(&'a self) -> Result<(), LaunchError> {
-        let gzdoom = self.gzdoom_build().to_owned();
-        let iwad = self.iwad().to_owned();
+        let gzdoom = self.gzdoom_build();
+        let iwad = self.iwad();
         if File::open(&gzdoom).is_err() {
             return Err(LaunchError::GZDoomBuildNotOpenable);
         }
