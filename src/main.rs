@@ -283,7 +283,76 @@ impl AddonManager {
         });
         addon_files
     }
+    fn try_launch<'a>(&'a self) -> Result<(), LaunchError> {
+        let gzdoom = self.gzdoom_build().to_owned();
+        let iwad = self.iwad().to_owned();
+        if File::open(&gzdoom).is_err() {
+            return Err(LaunchError::GZDoomBuildNotOpenable);
+        }
+        if !is_executable(&gzdoom) {
+            return Err(LaunchError::GZDoomBuildNotExecutable);
+        }
+        if File::open(&iwad).is_err() {
+            return Err(LaunchError::IWADNotFound);
+        }
+        if !is_iwad(&iwad) {
+            return Err(LaunchError::IWADNotIWAD);
+        }
+        let run_info = get_run_info(&self.exargs, &gzdoom);
+        let primary_addon = self.primary_addon();
+        let secondary_addons = self.secondary_addons();
+        match Command::new(run_info.new_executable.unwrap_or(&gzdoom))
+        .envs(env::vars())
+        .envs(run_info.environment)
+        .args(run_info.arguments)
+        .args(["-iwad", &iwad, "-config", &self.config, "-file"])
+        .args(primary_addon)
+        .args(secondary_addons).spawn() {
+            Ok(mut child) => {
+                if let Err(e) = child.wait() {
+                    return Err(LaunchError::FailedWait(Box::from(e)));
+                }
+            },
+            Err(e) => {
+                return Err(LaunchError::LaunchFailed(Box::from(e)));
+            },
+        }
+        Ok(())
+    }
 }
+
+#[derive(Debug)]
+enum LaunchError {
+    GZDoomBuildNotOpenable,
+    GZDoomBuildNotExecutable,
+    IWADNotFound,
+    IWADNotIWAD,
+    LaunchFailed(Box<dyn Error>),
+    FailedWait(Box<dyn Error>),
+}
+
+impl std::fmt::Display for LaunchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let thing_to_print = match self {
+            LaunchError::GZDoomBuildNotOpenable => String::from(
+                "Cannot open GZDoom build"),
+            LaunchError::GZDoomBuildNotExecutable => String::from(
+                "Selected GZDoom build is not an executable!"),
+            LaunchError::IWADNotFound => String::from(
+                "Cannot open IWAD"),
+            LaunchError::IWADNotIWAD => String::from(
+                "Selected IWAD is not an IWAD!"),
+            LaunchError::LaunchFailed(e) => format!(
+                "Could not launch GZDoom:\n{:?}", e),
+            LaunchError::FailedWait(e) => format!(
+                "Failed to wait on child process:\n{:?}", e),
+        };
+        write!(f, "{}", thing_to_print)?;
+        Ok(())
+    }
+}
+
+impl Error for LaunchError {}
 
 impl App for AddonManager {
     fn update(&mut self, ctx: &egui::Context) {
@@ -400,50 +469,11 @@ impl App for AddonManager {
 
             ui.horizontal(|ui| {
                 if ui.button("Launch").clicked() {
-                    let gzdoom = self.gzdoom_build().to_owned();
-                    let iwad = self.iwad().to_owned();
-                    let mut ok = true;
-                    if ok && File::open(&gzdoom).is_err() {
-                        self.popup = Some(String::from("Cannot open GZDoom build"));
-                        ok = false;
-                    }
-                    if ok && !is_executable(&gzdoom) {
-                        self.popup = Some(String::from(
-                            "Selected GZDoom build is not an executable!"));
-                        ok = false;
-                    }
-                    if ok && File::open(&iwad).is_err() {
-                        self.popup = Some(String::from("Cannot open IWAD"));
-                        ok = false;
-                    }
-                    if ok && !is_iwad(&iwad) {
-                        self.popup = Some(String::from(
-                            "Selected IWAD is not an IWAD!"));
-                        ok = false;
-                    }
-                    if ok {
-                    let run_info = get_run_info(&self.exargs, &gzdoom);
-                    let primary_addon = self.primary_addon();
-                    let secondary_addons = self.secondary_addons();
-                    match Command::new(run_info.new_executable.unwrap_or(&gzdoom))
-                    .envs(env::vars())
-                    .envs(run_info.environment)
-                    .args(run_info.arguments)
-                    .args(["-iwad", &iwad, "-config", &self.config, "-file"])
-                    .args(primary_addon)
-                    .args(secondary_addons).spawn() {
-                        Ok(mut child) => {
-                            if let Err(e) = child.wait() {
-                                self.popup = Some(format!("Failed to wait on child process:\n{:?}", e));
-                            }
-                        },
-                        Err(e) => {
-                            self.popup = Some(format!("Could not launch GZDoom:\n{:?}", e));
-                        },
+                    if let Err(e) = self.try_launch() {
+                        self.popup = Some(e.to_string());
                     }
                     if self.quit_on_launch {
                         self.quit = true;
-                    }
                     }
                 }
 
