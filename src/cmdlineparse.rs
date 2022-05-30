@@ -22,11 +22,7 @@ impl<'a> Iterator for CommandLineParser<'a> {
             } else {
                 self.escape = false;
             }
-            if !self.escape && !self.in_quotes && ch.is_ascii_whitespace() {
-                true
-            } else {
-                false
-            }
+            !self.escape && !self.in_quotes && ch.is_ascii_whitespace()
         }).unwrap_or(self.text.len().saturating_sub(start)) + start;
         self.pos = end;
         Some(&self.text[start..end])
