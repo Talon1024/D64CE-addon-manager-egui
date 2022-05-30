@@ -1,3 +1,5 @@
+use crate::cmdlineparse::parse_cmdline;
+
 #[derive(Debug, Clone, Default)]
 pub struct RunInfo<'a> {
 	pub environment: Vec<(&'a str, &'a str)>,
@@ -9,7 +11,7 @@ pub fn get_run_info<'a>(args: &'a str, orig_exe: &'a str) -> RunInfo<'a> {
 	let command: Option<(&str, &str)> = args.split_once("%command%");
 	match command {
 		Some((prefix, suffix)) => {
-			let pre_args = prefix.split_ascii_whitespace();
+			let pre_args = parse_cmdline(prefix);
 			let mut run_info = RunInfo::default();
 			let mut parsing_env = true;
 			pre_args.for_each(|arg| {
@@ -17,7 +19,7 @@ pub fn get_run_info<'a>(args: &'a str, orig_exe: &'a str) -> RunInfo<'a> {
 					let pair: Option<(&str, &str)> = arg.split_once('=');
 					match pair {
 						Some((key, val)) => {
-							run_info.environment.push((key, val));
+							run_info.environment.push((key, val.trim_matches('"')));
 						},
 						None => {
 							parsing_env = false;
@@ -33,15 +35,17 @@ pub fn get_run_info<'a>(args: &'a str, orig_exe: &'a str) -> RunInfo<'a> {
 					}
 				}
 			});
-			run_info.arguments.push(orig_exe);
-			suffix.split_ascii_whitespace().for_each(|arg| {
-				run_info.arguments.push(arg);
+			if let Some(_) = run_info.new_executable {
+				run_info.arguments.push(orig_exe);
+			}
+			parse_cmdline(suffix).for_each(|arg| {
+				run_info.arguments.push(arg.trim_matches('"'));
 			});
 			run_info
 		},
 		None => {
 			RunInfo {
-				arguments: args.split_ascii_whitespace().collect(),
+				arguments: parse_cmdline(args).collect(),
 				..Default::default()
 			}
 		}
@@ -67,6 +71,7 @@ mod tests {
 		let expected_env: Vec<(&str, &str)> = vec![("CUP","TEA"), ("FOOL","BARF")];
 		let expected_exe = Some("mangohud");
 		let expected_args = vec!["gzdoom", "booba.wad", "feet.wad"];
+
 		assert_eq!(actual.arguments, expected_args);
 		assert_eq!(actual.new_executable, expected_exe);
 		actual.environment.iter().zip(expected_env.iter()).for_each(|(key, val)| {
@@ -81,6 +86,22 @@ mod tests {
 		let expected_env: Vec<(&str, &str)> = vec![("ENABLE_VKBASALT","1")];
 		let expected_exe = Some("mangohud");
 		let expected_args = vec!["gzdoom"];
+
+		assert_eq!(actual.arguments, expected_args);
+		assert_eq!(actual.new_executable, expected_exe);
+		actual.environment.iter().zip(expected_env.iter()).for_each(|(key, val)| {
+			assert_eq!(key, val);
+		});
+	}
+
+	#[test]
+	fn with_spaces_and_quotes() {
+		let arghs = "A=\"Quotes and spaces, oh my!\" BOY=good %command% -glversion 4.2";
+		let actual = get_run_info(arghs, "gzdoom");
+		let expected_env: Vec<(&str, &str)> = vec![("A", "Quotes and spaces, oh my!"), ("BOY", "good")];
+		let expected_exe = None;
+		let expected_args = vec!["-glversion", "4.2"];
+
 		assert_eq!(actual.arguments, expected_args);
 		assert_eq!(actual.new_executable, expected_exe);
 		actual.environment.iter().zip(expected_env.iter()).for_each(|(key, val)| {

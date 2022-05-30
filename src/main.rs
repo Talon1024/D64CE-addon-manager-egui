@@ -11,6 +11,7 @@ use serde::{Serialize, Deserialize};
 
 mod addon;
 mod command;
+mod cmdlineparse;
 mod ephraim;
 mod checks;
 mod apps;
