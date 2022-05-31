@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 #[derive(Debug, Clone, Default)]
 pub struct CommandLineParser<'a> {
 	text: &'a str,
@@ -36,15 +38,52 @@ pub fn parse_cmdline<'a>(text: &'a str) -> CommandLineParser<'a> {
 	}
 }
 
+pub fn dequote<'a>(text: &'a str) -> Cow<'a, str> {
+	if text.starts_with('"') && text.ends_with('"') {
+		let text = Cow::from(text.trim_matches('"'));
+		if text.contains('\\') {
+			let mut eschar = false;
+			Cow::from(String::from_utf8(text.bytes().filter(|ch| {
+				if !eschar && ch == &b'\\' { eschar = true; }
+				else if eschar { eschar = false; }
+				!eschar
+			}).collect()).unwrap())
+		} else {
+			text
+		}
+	} else {
+		Cow::from(text)
+	}
+}
+
 #[cfg(test)]
 mod tests {
-	use super::parse_cmdline;
+	use super::*;
 
 	#[test]
 	fn mixed() {
 		let cmdline = "A=\"Has spaces\" B=nospaces Cnoeq D=\"escaped \\\"quotation\\\" marks\" E F";
 		let expected = ["A=\"Has spaces\"", "B=nospaces", "Cnoeq", "D=\"escaped \\\"quotation\\\" marks\"", "E", "F"];
 		let parser = parse_cmdline(cmdline);
+
+		parser.zip(expected.into_iter()).for_each(|(actual, expected)| {
+			assert_eq!(actual, expected);
+		});
+	}
+
+	#[test]
+	fn dequoted() {
+		let cmdline = "A=\"Has spaces\" B=nospaces Cnoeq D=\"escaped \\\"quotation\\\" marks\" E F";
+		let expected = [
+			Some(("A", Cow::from("Has spaces"))),
+			Some(("B", Cow::from("nospaces"))),
+			None,
+			Some(("D", Cow::from("escaped \"quotation\" marks"))),
+			None, None];
+		let parser = parse_cmdline(cmdline).map(|th| {
+			let g = th.split_once('=')?;
+			Some((g.0, dequote(g.1)))
+		});
 
 		parser.zip(expected.into_iter()).for_each(|(actual, expected)| {
 			assert_eq!(actual, expected);

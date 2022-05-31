@@ -5,7 +5,7 @@ use std::{
 	io::Write,
 	fs::{self, File, OpenOptions},
 	iter, collections::HashMap,
-	process::Command,
+	process::Command
 };
 use serde::{Serialize, Deserialize};
 
@@ -304,7 +304,7 @@ impl AddonManager {
 		let secondary_addons = self.secondary_addons();
 		match Command::new(run_info.new_executable.unwrap_or(&gzdoom))
 		.envs(env::vars())
-		.envs(run_info.environment)
+		.envs(run_info.environment.iter().map(|(a, b)| (a, b.as_ref())))
 		.args(run_info.arguments)
 		.args(["-iwad", &iwad, "-config", &self.config, "-file"])
 		.args(primary_addon)
