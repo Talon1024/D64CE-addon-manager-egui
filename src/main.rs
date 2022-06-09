@@ -442,7 +442,7 @@ impl App for AddonManager {
 			ui.separator();
 
 			egui::CollapsingHeader::new("Secondary addons")
-			.default_open(self.secondary_addons.len() <= 5).show(ui, |ui| {
+			.default_open(self.secondary_addons.len() <= 4).show(ui, |ui| {
 				self.selected_secondary_addons.iter_mut().zip(self.secondary_addons.iter())
 				.for_each(|(selected, name)| {
 					ui.checkbox(selected, name);
