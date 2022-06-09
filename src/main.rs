@@ -306,7 +306,11 @@ impl AddonManager {
 		.envs(env::vars())
 		.envs(run_info.environment.iter().map(|(a, b)| (a, b.as_ref())))
 		.args(run_info.arguments)
-		.args(["-iwad", &iwad, "-config", &self.config, "-file"])
+		.args(["-iwad", &iwad])
+		.args((if self.config.len() > 0 {
+			Some(["-config", &self.config])
+		} else {None}).iter().flatten())
+		.arg("-file")
 		.args(primary_addon)
 		.args(secondary_addons).spawn() {
 			Ok(mut child) => {
