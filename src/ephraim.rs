@@ -23,7 +23,7 @@ impl AppWindow {
 		use glutin::{Api, GlRequest, dpi::{Size, LogicalSize}};
 		let el = glutin::event_loop::EventLoop::new();
 		let wb = glutin::window::WindowBuilder::new()
-			.with_title("Doom 64 CE launcher")
+			.with_title("Talauncher")
 			.with_inner_size(Size::new(LogicalSize::new(550.0f32, 300.0f32)));
 		let cb = glutin::ContextBuilder::new()
 			.with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
