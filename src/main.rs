@@ -125,9 +125,11 @@ impl AddonManager {
 		let primary_addons: Box<[String]> = iter::once(String::from("None")).chain(addons.iter().filter(|(_name, addon)| {
 			addon.secondary.is_none()
 		}).map(|(name, _addon)| name.clone())).collect();
-		let secondary_addons: Box<[String]> = addons.iter().filter(|(_name, addon)| {
+		let mut secondary_addons: Box<[String]> = addons.iter().filter(|(_name, addon)| {
 			addon.secondary.is_some()
 		}).map(|(name, _addon)| name.clone()).collect();
+		secondary_addons.sort();
+		let secondary_addons = secondary_addons;
 		let mut selected_secondary_addons: Box<[bool]> = Box::from_iter(secondary_addons.iter().map(|_| true));
 		let bpat = app_options.gzdoom_glob.unwrap_or(String::new());
 		let builds: Box<[String]> = match glob::glob(&bpat) {
