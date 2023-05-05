@@ -122,9 +122,12 @@ impl From<&AddonManager> for Persistence {
 
 impl AddonManager {
 	pub fn new(addons: AddonMap, app_options: AppOptions) -> AddonManager {
-		let primary_addons: Box<[String]> = iter::once(String::from("None")).chain(addons.iter().filter(|(_name, addon)| {
+		let mut primary_addons: Box<[String]> = iter::once(String::from("None"))
+		.chain(addons.iter().filter(|(_name, addon)| {
 			addon.secondary.is_none()
 		}).map(|(name, _addon)| name.clone())).collect();
+		primary_addons.sort();
+		let primary_addons = primary_addons;
 		let mut secondary_addons: Box<[String]> = addons.iter().filter(|(_name, addon)| {
 			addon.secondary.is_some()
 		}).map(|(name, _addon)| name.clone()).collect();
