@@ -126,7 +126,14 @@ impl AddonManager {
 		.chain(addons.iter().filter(|(_name, addon)| {
 			addon.secondary.is_none()
 		}).map(|(name, _addon)| name.clone())).collect();
-		primary_addons.sort();
+		primary_addons.sort_by(|a, b| {
+			use std::cmp::Ordering::*;
+			match (a.as_str(), b.as_str()) {
+				("None", _) => Less,
+				(_, "None") => Greater,
+				_ => a.cmp(b),
+			}
+		});
 		let primary_addons = primary_addons;
 		let mut secondary_addons: Box<[String]> = addons.iter().filter(|(_name, addon)| {
 			addon.secondary.is_some()
