@@ -1,0 +1,70 @@
+# List of potentially available addons and the files associated with them
+addons:
+  # Each addon has two lists of file names:
+  "Knee-Deep in the Dead 64 by Z0k":
+    # "required" is a list of the core files. If any of these are missing, the
+    # addon will be unavailable.
+    required:
+      - "DOOM64.CE.Maps.Episode1/DOOM64.CE.Maps.Episode1.pk3"
+    # "optional" is a list of files which are not strictly necessary, but will
+    # be loaded if they are found
+    optional:
+      - "DOOM64.CE.Maps.Episode1/DOOM64.CE.Maps.Episode1.Addon.GFX.Upscale.pk3"
+      - "DOOM64.CE.Maps.Episode1/DOOM64.CE.Maps.Episode1.Addon.GFX.PBR.pk3"
+      - "DOOM64.CE.Maps.Episode1/DOOM64.CE.Maps.Episode1.Addon.GFX.Brightmaps.pk3"
+  "Beta64 by Antnee":
+    required:
+      - "DOOM64.CE.Maps.Beta64/DOOM64.CE.Maps.Beta64.pk3"
+    optional:
+      - "DOOM64.CE.Maps.Beta64/DOOM64.CE.Maps.Beta64.Addon.GFX.Upscale.pk3"
+      - "DOOM64.CE.Maps.Beta64/DOOM64.CE.Maps.Beta64.Addon.GFX.PBR.pk3"
+      - "DOOM64.CE.Maps.Beta64/DOOM64.CE.Maps.Beta64.Addon.GFX.Brightmaps.pk3"
+  "scwiba's The UnMaking":
+    required:
+      - "DOOM64.CE.Maps.TheUnMaking/DOOM64.CE.Maps.TheUnMaking.pk3"
+    optional:
+      - "DOOM64.CE.Maps.TheUnMaking/DOOM64.CE.Maps.TheUnMaking.Addon.GFX.Upscale.pk3"
+      - "DOOM64.CE.Maps.TheUnMaking/DOOM64.CE.Maps.TheUnMaking.Addon.GFX.PBR.pk3"
+      - "DOOM64.CE.Maps.TheUnMaking/DOOM64.CE.Maps.TheUnMaking.Addon.GFX.Brightmaps.pk3"
+      - "DOOM64.CE.Maps.TheUnMaking/DOOM64.CE.Maps.TheUnMaking.Addon.GFX.Parallax.pk3"
+  "Rumble Pak":
+    required:
+      - "DOOM64.CE.Maps.RumblePak/DOOM64.CE.Maps.RumblePak.pk3"
+    optional:
+      - "DOOM64.CE.Maps.RumblePak/DOOM64.CE.Maps.RumblePak.Addon.GFX.Upscale.pk3"
+      - "DOOM64.CE.Maps.RumblePak/DOOM64.CE.Maps.RumblePak.Addon.GFX.PBR.pk3"
+      - "DOOM64.CE.Maps.RumblePak/DOOM64.CE.Maps.RumblePak.Addon.GFX.Brightmaps.pk3"
+      - "DOOM64.CE.Maps.RumblePak/DOOM64.CE.Maps.RumblePak.Addon.GFX.Parallax.pk3"
+  # Secondary addons can be loaded in addition to a primary addon
+  "N64 Bilinear texture filtering":
+    required:
+      - "3PointFilter.pk3"
+    secondary: 1
+  "PSX Doom horizontal stretching":
+    required:
+      - "AspectRatio.pk3"
+    secondary: 1
+  "Intelligent Supplies by Zhs2":
+    required:
+      - "Zhs2-IS-1.6.pk3"
+    secondary: 1
+  "Gearbox by m8f":
+    required:
+      - "gearbox-v0.7.2.pk3"
+    secondary: 1
+  "Modern sound pack":
+    required:
+      - "ModernSFX.pk3"
+    secondary: 1
+  "Bandither by Immorpher":
+    required:
+      - "Bandither.pk3"
+    secondary: 1
+  "Doom 64 CE Reworked v1.1b":
+    required:
+      - "Doom_64_CE_Reworked_v1.1b/doom-64-CE-reworked_v1.1b.pk3"
+    secondary: 1
+  "Arranged BGM":
+    required:
+      - "DOOM64.CE.Addon.BGM.Arranged.pk3"
+    secondary: 1
