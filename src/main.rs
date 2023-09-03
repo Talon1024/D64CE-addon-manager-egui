@@ -103,7 +103,6 @@ struct AddonManager {
     selected_iwad: GZDoomBuildSelection,
     quit_on_launch: bool,
     popup: Option<String>,
-    quit: bool,
     exargs: String,
     config: String,
 }
@@ -505,7 +504,7 @@ impl std::fmt::Display for LaunchError {
 impl Error for LaunchError {}
 
 impl App for AddonManager {
-    fn update(&mut self, ctx: &egui::Context, _eframe: &mut Frame) {
+    fn update(&mut self, ctx: &egui::Context, eframe: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             match &mut self.selected_gzdoom_build {
                 GZDoomBuildSelection::Single => {}
@@ -636,12 +635,12 @@ impl App for AddonManager {
                         self.popup = Some(e.to_string());
                     }
                     if self.quit_on_launch {
-                        self.quit = true;
+                        eframe.close();
                     }
                 }
 
                 if ui.button("Exit").clicked() {
-                    self.quit = true;
+                    eframe.close();
                 }
             });
         });
