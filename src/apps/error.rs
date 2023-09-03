@@ -1,4 +1,4 @@
-use crate::ephraim::App;
+use eframe::{App, Frame};
 
 pub struct ErrorMessage(String, bool);
 impl From<String> for ErrorMessage {
@@ -7,7 +7,7 @@ impl From<String> for ErrorMessage {
 	}
 }
 impl App for ErrorMessage {
-	fn update(&mut self, ctx: &egui::Context) {
+	fn update(&mut self, ctx: &egui::Context, _eframe: &mut Frame) {
 		egui::CentralPanel::default().show(ctx, |ui| {
 			ui.heading("Error!");
 			ui.label(&self.0);
@@ -40,8 +40,5 @@ impl App for ErrorMessage {
 				self.1 = true;
 			}
 		});
-	}
-	fn quit(&self) -> bool {
-		self.1
 	}
 }
