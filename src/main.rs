@@ -11,34 +11,24 @@ use addon::{AddonMap, AddonSpecification};
 use apps::error::ErrorMessage;
 use checks::*;
 use command::*;
-use eframe::{App, AppCreator, Frame, HardwareAcceleration, NativeOptions, Storage, Theme};
-
-#[derive(Debug, Clone, Default)]
-struct AppOptions {
-    quit_on_launch: bool,
-    gzdoom_glob: Option<String>,
-    iwad_glob: Option<String>,
-}
+use eframe::{
+    App,
+    AppCreator,
+    Frame,
+    HardwareAcceleration,
+    NativeOptions,
+    Storage,
+    Theme
+};
+use egui::viewport::{ViewportBuilder, ViewportCommand};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let app_options = AppOptions {
-        quit_on_launch: env::args().any(|arg| arg == "--quit-on-launch"),
-        gzdoom_glob: env::args()
-            .skip_while(|arg| arg != "--gzdoom-glob")
-            .skip(1)
-            .next(),
-        iwad_glob: env::args()
-            .skip_while(|arg| arg != "--iwad-glob")
-            .skip(1)
-            .next(),
-        ..Default::default()
-    };
     let addons: Result<HashMap<String, AddonSpecification>, Box<dyn Error>> =
         addon::get_addons(None);
     let app: AppCreator = Box::new(|cc| -> Box<dyn App> {
         let data = cc.storage.map(Persistence::from);
         match addons {
-            Ok(addons) => Box::new(AddonManager::new(addons, app_options, data)),
+            Ok(addons) => Box::new(AddonManager::new(addons, data)),
             Err(error) => {
                 let message = format!("{:#?}", error);
                 Box::new(ErrorMessage::from(message))
@@ -46,20 +36,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     });
     let native_options = NativeOptions {
-        always_on_top: false,
-        maximized: true,
-        decorated: true,
-        fullscreen: true,
-        drag_and_drop_support: false,
-        icon_data: None,
-        initial_window_pos: None,
-        initial_window_size: None,
-        min_window_size: None,
-        max_window_size: None,
-        resizable: true,
-        transparent: false,
-        mouse_passthrough: false,
-        active: true,
+        viewport: ViewportBuilder::default()
+            .with_active(true)
+            .with_fullscreen(true)
+            .with_decorations(true)
+            .with_maximized(true)
+            .with_app_id("Talon1024.Talauncher"),
         vsync: false,
         multisampling: 0,
         depth_buffer: 0,
@@ -70,9 +52,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         default_theme: Theme::Dark,
         run_and_return: false,
         event_loop_builder: None,
+        window_builder: None,
         shader_version: None,
         centered: true,
-        app_id: Some(String::from("Talon1024.Talauncher")),
+        persist_window: false,
     };
     eframe::run_native("Talauncher", native_options, app).map_err(Box::from)
 }
@@ -101,7 +84,6 @@ struct AddonManager {
     selected_secondary_addons: Box<[bool]>,
     selected_gzdoom_build: GZDoomBuildSelection,
     selected_iwad: GZDoomBuildSelection,
-    quit_on_launch: bool,
     popup: Option<String>,
     exargs: String,
     config: String,
@@ -111,33 +93,44 @@ struct AddonManager {
 struct Persistence {
     gzdoom_build: Option<String>,
     primary_addon: Option<String>,
-    secondary_addons: Option<HashMap<String, bool>>,
+    secondary_addons: Option<Vec<String>>,
     exargs: Option<String>,
     config: Option<String>,
     iwad: Option<String>,
 }
 
+macro_rules! persist_item {
+    ($st: ident, $name: ident) => {
+        match $name {
+            Some(ref $name) => { $st.set_string(stringify!($name), $name.clone()); },
+            None => { $st.set_string(stringify!($name), String::default()); }
+        }
+    };
+    ($st: ident, $self: ident.$name: ident) => {
+        match $self.$name {
+            Some(ref $name) => { $st.set_string(stringify!($name), $name.clone()); },
+            None => { $st.set_string(stringify!($name), String::default()); }
+        }
+    };
+}
+
 impl Persistence {
     fn save(&self, storage: &mut dyn Storage) {
-        if let Some(ref gzdoom_build) = self.gzdoom_build {
-            storage.set_string("gzdoom_build", gzdoom_build.clone());
-        }
-        if let Some(ref primary_addon) = self.primary_addon {
-            storage.set_string("primary_addon", primary_addon.clone());
-        }
-        if let Some(ref secondary_addons) = self.secondary_addons {
-            let secondary_addons = serde_yaml::to_string(secondary_addons).unwrap();
-            storage.set_string("secondary_addons", secondary_addons);
-        }
-        if let Some(ref exargs) = self.exargs {
-            storage.set_string("exargs", exargs.clone());
-        }
-        if let Some(ref config) = self.config {
-            storage.set_string("config", config.clone());
-        }
-        if let Some(ref iwad) = self.iwad {
-            storage.set_string("iwad", iwad.clone());
-        }
+        persist_item!(storage, self.gzdoom_build);
+        persist_item!(storage, self.primary_addon);
+        persist_item!(storage, self.gzdoom_build);
+        // TODO: Use Iterator::intersperse when it's stable
+        let secondary_addons = self.secondary_addons.as_ref()
+            .map(|v| v.iter()
+                .map(|kv| {
+                    let mut kv = kv.clone();
+                    kv.push('\n');
+                    kv
+                }).collect::<String>());
+        persist_item!(storage, secondary_addons);
+        persist_item!(storage, self.exargs);
+        persist_item!(storage, self.config);
+        persist_item!(storage, self.iwad);
     }
 }
 
@@ -156,6 +149,7 @@ impl From<&AddonManager> for Persistence {
                         .iter()
                         .cloned()
                         .zip(v.selected_secondary_addons.iter().cloned())
+                        .filter_map(|(n, s)| s.then_some(n))
                         .collect(),
                 ),
             },
@@ -185,7 +179,7 @@ impl From<&dyn Storage> for Persistence {
         let primary_addon = storage.get_string("primary_addon");
         let secondary_addons = storage
             .get_string("secondary_addons")
-            .map(|s| serde_yaml::from_str(s.as_str()).unwrap());
+            .map(|s| s.split(['\n']).map(str::to_string).collect());
         let exargs = storage.get_string("exargs");
         let config = storage.get_string("config");
         let iwad = storage.get_string("iwad");
@@ -203,7 +197,6 @@ impl From<&dyn Storage> for Persistence {
 impl AddonManager {
     pub fn new(
         addons: AddonMap,
-        app_options: AppOptions,
         config: Option<Persistence>,
     ) -> AddonManager {
         let mut primary_addons: Box<[String]> = iter::once(String::from("None"))
@@ -232,28 +225,8 @@ impl AddonManager {
         let secondary_addons = secondary_addons;
         let selected_secondary_addons: Box<[bool]> =
             Box::from_iter(secondary_addons.iter().map(|_| true));
-        let bpat = app_options.gzdoom_glob.unwrap_or(String::new());
-        let builds: Box<[String]> = match glob::glob(&bpat) {
-            Ok(paths) => paths
-                .filter_map(Result::ok)
-                .filter_map(|p| match is_executable(&p) {
-                    true => p.to_str().map(str::to_string),
-                    false => None,
-                })
-                .collect(),
-            Err(_e) => Box::from([]),
-        };
-        let ipat = app_options.iwad_glob.unwrap_or(String::new());
-        let iwads: Box<[String]> = match glob::glob(&ipat) {
-            Ok(paths) => paths
-                .filter_map(Result::ok)
-                .filter_map(|p| match is_iwad(&p) {
-                    true => p.to_str().map(str::to_string),
-                    false => None,
-                })
-                .collect(),
-            Err(_e) => Box::from([]),
-        };
+        let builds: Box<[String]> = Box::from([]);
+        let iwads: Box<[String]> = Box::from([]);
 
         // STEP: Load configuration
         let (
@@ -282,8 +255,10 @@ impl AddonManager {
                         config
                             .secondary_addons
                             .as_ref()
-                            .map(|addons| addons.get(sa).copied().unwrap_or(true))
-                            .unwrap_or(true)
+                            .map(|addons| addons.iter().find_map(
+                                |asa| (sa == asa).then_some(true)
+                                ).unwrap_or(false)
+                            ).unwrap_or(true)
                     })
                     .collect();
                 let selected_gzdoom_build = match builds.len() {
@@ -349,7 +324,6 @@ impl AddonManager {
             selected_secondary_addons,
             selected_gzdoom_build,
             selected_iwad,
-            quit_on_launch: app_options.quit_on_launch,
             exargs,
             config,
             ..Default::default()
@@ -504,7 +478,7 @@ impl std::fmt::Display for LaunchError {
 impl Error for LaunchError {}
 
 impl App for AddonManager {
-    fn update(&mut self, ctx: &egui::Context, eframe: &mut Frame) {
+    fn update(&mut self, ctx: &egui::Context, _eframe: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             match &mut self.selected_gzdoom_build {
                 GZDoomBuildSelection::Single => {}
@@ -602,12 +576,14 @@ impl App for AddonManager {
             egui::CollapsingHeader::new("Secondary addons")
                 .default_open(self.secondary_addons.len() <= 4)
                 .show(ui, |ui| {
+                    egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
                     self.selected_secondary_addons
                         .iter_mut()
                         .zip(self.secondary_addons.iter())
                         .for_each(|(selected, name)| {
                             ui.checkbox(selected, name);
                         });
+                    });
                 });
 
             ui.separator();
@@ -634,13 +610,10 @@ impl App for AddonManager {
                     if let Err(e) = self.try_launch() {
                         self.popup = Some(e.to_string());
                     }
-                    if self.quit_on_launch {
-                        eframe.close();
-                    }
                 }
 
                 if ui.button("Exit").clicked() {
-                    eframe.close();
+                    ctx.send_viewport_cmd(ViewportCommand::Close);
                 }
             });
         });
@@ -668,42 +641,4 @@ impl App for AddonManager {
     fn persist_egui_memory(&self) -> bool {
         false
     }
-    fn persist_native_window(&self) -> bool {
-        false
-    }
-    /* fn on_exit(&mut self, _glc: Option<&Context>) {
-        // Mutable to immutable reference
-        let data = Persistence::from(&*self);
-        let mut cfg_path =
-            dirs::config_dir().unwrap_or(dirs::home_dir().unwrap_or(env::current_dir().unwrap()));
-        cfg_path.push(&format!("Talon1024{0}Addon Manager{0}", DSEP));
-        if let Err(e) = fs::create_dir_all(&cfg_path) {
-            eprintln!("Could not save settings:\n{:?}", e);
-            return;
-        }
-        cfg_path.push("addon_manager.yml");
-        let yaml = serde_yaml::to_string(&data);
-        match yaml {
-            Ok(yaml) => {
-                let file = OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(cfg_path);
-                match file {
-                    Ok(mut f) => {
-                        if let Err(e) = f.write_all(&yaml.into_bytes()) {
-                            eprintln!("Could not save settings:\n{:?}", e);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Could not save settings:\n{:?}", e);
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("Could not save settings:\n{:?}", e);
-            }
-        }
-    } */
 }
